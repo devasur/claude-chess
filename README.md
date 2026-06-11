@@ -39,7 +39,7 @@ Any one of (each puts `chessai` on PATH, then runs `chessai install`):
 ```sh
 npx chessai install            # npm — builds the tiny Rust installer on first run
 cargo install chessai          # cargo  (then: chessai install)
-curl -fsSL https://raw.githubusercontent.com/boni/claude-chess/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/devasur/claude-chess/main/install.sh | sh
 ```
 
 `chessai install` writes:

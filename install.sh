@@ -11,7 +11,7 @@
 
 set -eu
 
-REPO_USER="boni"
+REPO_USER="devasur"
 REPO_NAME="claude-chess"
 REPO="https://github.com/${REPO_USER}/${REPO_NAME}"
 RAW="https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/main"
