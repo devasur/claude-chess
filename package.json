@@ -1,6 +1,9 @@
 {
-  "name": "chessai",
+  "name": "@entelligentsia/chessai",
   "version": "0.2.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "Play chess against Claude Code. Installs a /chess skill: a Node server + clickable board with a legal-move engine, where Claude plays black.",
   "bin": {
     "chessai": "bin/chessai.js"
