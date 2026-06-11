@@ -37,8 +37,13 @@ Two pieces, clean split of responsibility:
 Any one of (each puts `chessai` on PATH, then runs `chessai install`):
 
 ```sh
-npx @entelligentsia/chessai install            # npm — builds the tiny Rust installer on first run
-cargo install chessai          # cargo  (then: chessai install)
+# npm — builds the tiny Rust installer on first run
+npx @entelligentsia/chessai install
+
+# cargo — builds from the git repo (the crates.io name `chessai` is an unrelated crate)
+cargo install --git https://github.com/devasur/claude-chess chessai && chessai install
+
+# curl | sh
 curl -fsSL https://raw.githubusercontent.com/devasur/claude-chess/main/install.sh | sh
 ```
 
