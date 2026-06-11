@@ -41,10 +41,10 @@ Any one of (each puts `chessai` on PATH, then runs `chessai install`):
 npx @entelligentsia/chessai install
 
 # cargo — builds from the git repo (the crates.io name `chessai` is an unrelated crate)
-cargo install --git https://github.com/devasur/claude-chess chessai && chessai install
+cargo install --git https://github.com/devasur/chessai chessai && chessai install
 
 # curl | sh
-curl -fsSL https://raw.githubusercontent.com/devasur/claude-chess/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/devasur/chessai/main/install.sh | sh
 ```
 
 `chessai install` writes:

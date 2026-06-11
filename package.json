@@ -22,13 +22,13 @@
   "keywords": ["chess", "claude", "claude-code", "agent", "skill", "cli", "rust"],
   "license": "MIT",
   "author": "devasur",
-  "homepage": "https://github.com/devasur/claude-chess#readme",
+  "homepage": "https://github.com/devasur/chessai#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/devasur/claude-chess.git"
+    "url": "git+https://github.com/devasur/chessai.git"
   },
   "bugs": {
-    "url": "https://github.com/devasur/claude-chess/issues"
+    "url": "https://github.com/devasur/chessai/issues"
   },
   "engines": {
     "node": ">=16"

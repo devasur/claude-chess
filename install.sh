@@ -12,7 +12,7 @@
 set -eu
 
 REPO_USER="devasur"
-REPO_NAME="claude-chess"
+REPO_NAME="chessai"
 REPO="https://github.com/${REPO_USER}/${REPO_NAME}"
 RAW="https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/main"
 INSTALL_DIR="${CHESSAI_HOME:-$HOME/.chessai}/bin"

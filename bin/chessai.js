@@ -37,7 +37,7 @@ function buildFromSource() {
     console.error(
       '\nchessai: no prebuilt binary and `cargo` was not found on PATH.\n' +
         'Install the Rust toolchain (https://rustup.rs) and re-run, or use the\n' +
-        'curl installer:  curl -fsSL https://raw.githubusercontent.com/devasur/claude-chess/main/install.sh | sh\n'
+        'curl installer:  curl -fsSL https://raw.githubusercontent.com/devasur/chessai/main/install.sh | sh\n'
     )
     process.exit(1)
   }
