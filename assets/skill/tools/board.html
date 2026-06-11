@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>chessai — you (white) vs Claude (black)</title>
+<style>
+  :root { --light:#ebecd0; --dark:#779556; --sel:#f6f669; --hint:#cdd26a; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+         background:#262421; color:#e8e6e3; display:flex; gap:28px; padding:28px; flex-wrap:wrap; }
+  h1 { font-size:18px; margin:0 0 4px; font-weight:600; }
+  .sub { color:#9a9a93; font-size:13px; margin-bottom:14px; }
+  #board { display:grid; grid-template-columns:repeat(8,64px); grid-template-rows:repeat(8,64px);
+           border:4px solid #3d3a35; border-radius:4px; user-select:none; }
+  .sq { width:64px; height:64px; display:flex; align-items:center; justify-content:center;
+        font-size:46px; line-height:1; cursor:pointer; position:relative; }
+  .light { background:var(--light); } .dark { background:var(--dark); }
+  .sq.sel { background:var(--sel) !important; }
+  .sq .coord { position:absolute; bottom:2px; right:3px; font-size:9px; color:#00000055; }
+  .piece-w { color:#fafafa; text-shadow:0 0 2px #000, 0 1px 1px #555; }
+  .piece-b { color:#202020; text-shadow:0 0 1px #888; }
+  .panel { width:340px; }
+  #status { font-size:14px; padding:8px 12px; background:#3692e7; border-radius:6px; margin-bottom:12px; }
+  #status.ai { background:#7c4dff; } #status.over { background:#b23b3b; }
+  button { background:#4a4843; color:#fff; border:0; padding:8px 14px; border-radius:6px;
+           cursor:pointer; font-size:13px; margin-right:8px; }
+  button:hover { background:#5c5953; }
+  #moves { margin-top:14px; max-height:480px; overflow:auto; }
+  .mv { padding:8px 10px; border-radius:6px; margin-bottom:6px; background:#302e2b; font-size:13px; }
+  .mv .san { font-weight:700; } .mv.ai { border-left:3px solid #7c4dff; }
+  .mv .cmt { color:#b9b7b2; margin-top:3px; font-style:italic; }
+  .mv .rsn { color:#86847f; margin-top:3px; font-size:12px; }
+</style>
+</head>
+<body>
+  <div>
+    <h1>chessai</h1>
+    <div class="sub">You play <b>white</b> · Claude plays <b>black</b> · click a piece then its destination</div>
+    <div id="board"></div>
+  </div>
+  <div class="panel">
+    <div id="status">connecting…</div>
+    <button onclick="reset()">New game</button>
+    <button onclick="flip()">Flip board</button>
+    <div id="moves"></div>
+  </div>
+<script>
+let state = null, sel = null, flipped = false;
+
+function fenToGrid(fen) {
+  const rows = fen.split(' ')[0].split('/');
+  return rows.map(r => {
+    const out = [];
+    for (const ch of r) {
+      if (/\d/.test(ch)) for (let i=0;i<+ch;i++) out.push(null);
+      else out.push(ch);
+    }
+    return out;
+  });
+}
+const GLYPH = {K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙',
+               k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟'};
+
+function sqName(r,c){ return String.fromCharCode(97+c) + (8-r); }
+
+function render() {
+  if (!state) return;
+  const grid = fenToGrid(state.fen);
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  const rows = flipped ? [...Array(8).keys()].reverse() : [...Array(8).keys()];
+  const cols = flipped ? [...Array(8).keys()].reverse() : [...Array(8).keys()];
+  for (const r of rows) for (const c of cols) {
+    const d = document.createElement('div');
+    const name = sqName(r,c);
+    d.className = 'sq ' + ((r+c)%2 ? 'dark':'light') + (sel===name ? ' sel':'');
+    const p = grid[r][c];
+    if (p) { d.textContent = GLYPH[p]; d.className += p===p.toUpperCase() ? ' piece-w':' piece-b';
+             d.firstChild && (d.style.fontFamily='serif'); d.style.fontFamily='serif'; }
+    const co = document.createElement('span'); co.className='coord'; co.textContent=name; d.appendChild(co);
+    d.onclick = () => clickSquare(name);
+    board.appendChild(d);
+  }
+  const turn = state.fen.split(' ')[1];
+  const st = document.getElementById('status');
+  if (state.status && state.status !== 'playing') { st.textContent = state.status; st.className='over'; }
+  else if (turn==='w') { st.textContent='Your move (white)'; st.className=''; }
+  else { st.textContent='Claude is thinking… (black)'; st.className='ai'; }
+  renderMoves();
+}
+
+function renderMoves() {
+  const box = document.getElementById('moves'); box.innerHTML='';
+  for (const m of (state.history||[]).slice().reverse()) {
+    const d = document.createElement('div');
+    d.className = 'mv' + (m.by==='ai' ? ' ai':'');
+    let html = `<span class="san">${m.number}. ${m.color==='b'?'… ':''}${m.san||(m.from+m.to)}</span>`;
+    if (m.comment) html += `<div class="cmt">${escapeHtml(m.comment)}</div>`;
+    if (m.reasoning) html += `<div class="rsn">${escapeHtml(m.reasoning)}</div>`;
+    d.innerHTML = html; box.appendChild(d);
+  }
+}
+function escapeHtml(s){ return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+function clickSquare(name) {
+  const turn = state.fen.split(' ')[1];
+  if (turn !== 'w') return; // only the human (white) drives clicks
+  if (!sel) { sel = name; render(); return; }
+  if (sel === name) { sel = null; render(); return; }
+  postMove(sel, name); sel = null;
+}
+
+async function postMove(from, to) {
+  await fetch('/api/move', { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ from, to, by:'human' }) });
+  await poll();
+}
+async function reset() { await fetch('/api/reset',{method:'POST'}); await poll(); }
+function flip() { flipped = !flipped; render(); }
+
+async function poll() {
+  try { const r = await fetch('/api/state'); state = await r.json(); render(); }
+  catch(e) { document.getElementById('status').textContent='server offline'; }
+}
+poll(); setInterval(poll, 1500);
+</script>
+</body>
+</html>

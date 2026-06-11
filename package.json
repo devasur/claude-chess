@@ -1,0 +1,24 @@
+{
+  "name": "chessai",
+  "version": "0.1.0",
+  "description": "Cross-platform chess server/client you play against Claude Code via a skill (/chess)",
+  "bin": {
+    "chessai": "bin/chessai.js"
+  },
+  "scripts": {
+    "postinstall": "node bin/chessai.js --build-only || true"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "assets/",
+    "Cargo.toml",
+    "install.sh",
+    "README.md"
+  ],
+  "keywords": ["chess", "claude", "claude-code", "agent", "cli", "rust"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=16"
+  }
+}
