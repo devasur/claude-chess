@@ -185,7 +185,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
     return res.end(BOARD_HTML)
   }
-  if (m === 'GET' && url === '/api/health') return sendJson(res, 200, { ok: true, version: '0.2.0' })
+  if (m === 'GET' && url === '/api/health') return sendJson(res, 200, { ok: true, version: '0.2.1' })
   if (m === 'GET' && url === '/api/state') return sendJson(res, 200, fullState())
   if (m === 'GET' && url === '/api/turn') return sendJson(res, 200, turnState())
   if (m === 'POST' && url === '/api/reset') { reset(); return sendJson(res, 200, fullState()) }

@@ -46,6 +46,13 @@ pub fn run() -> std::io::Result<()> {
     write_file(&chess.join("tools").join("board.html"), TOOL_BOARD)?;
     write_file(&chess.join("tools").join("chess-api.cjs"), TOOL_API)?;
 
+    // Remove the legacy v0.1.x workflow, if a previous install left one behind.
+    let legacy = home.join(".claude").join("workflows").join("chessai.cjs");
+    if legacy.exists() {
+        let _ = fs::remove_file(&legacy);
+        println!("  removed legacy {}", legacy.display());
+    }
+
     println!("\nDone. Requires Node.js on PATH (the server + tools are Node).");
     println!("Inside Claude Code, start a game with:  /chess");
     println!("Or run the board manually:  node {}/tools/server.cjs --open", chess.display());

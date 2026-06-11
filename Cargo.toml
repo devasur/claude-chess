@@ -1,6 +1,6 @@
 [package]
 name = "chessai"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Installer/distribution vehicle for the Claude Code chess skill (/chess) — no marketplace required"
 license = "MIT"

@@ -3,9 +3,14 @@
  * npx/npm launcher for the chessai Rust binary.
  *
  * Strategy:
- *   1. If a cached native binary exists (~/.chessai/bin/chessai[.exe]), exec it.
+ *   1. If a cached native binary built from THIS package version exists
+ *      (~/.chessai/bin/chessai[.exe]), exec it.
  *   2. Otherwise build it from the Rust sources bundled in this npm package
- *      using the local `cargo` toolchain, cache it, then exec it.
+ *      using the local `cargo` toolchain, cache it (stamping the version), then
+ *      exec it.
+ *
+ * The version stamp is essential: without it an old cached binary would be
+ * reused after an upgrade, so `npx chessai install` would lay down a stale skill.
  *
  * All CLI args are forwarded to the native binary, so `npx chessai install`,
  * `npx chessai --server`, etc. all work transparently.
@@ -15,10 +20,12 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 
+const PKG_VERSION = require('../package.json').version
 const PKG_ROOT = path.resolve(__dirname, '..')
 const BIN_DIR = path.join(os.homedir(), '.chessai', 'bin')
 const EXE = process.platform === 'win32' ? 'chessai.exe' : 'chessai'
 const BIN_PATH = path.join(BIN_DIR, EXE)
+const STAMP_PATH = path.join(BIN_DIR, '.version')
 
 function have(cmd) {
   const probe = spawnSync(cmd, ['--version'], { stdio: 'ignore' })
@@ -47,11 +54,18 @@ function buildFromSource() {
   fs.mkdirSync(BIN_DIR, { recursive: true })
   fs.copyFileSync(built, BIN_PATH)
   if (process.platform !== 'win32') fs.chmodSync(BIN_PATH, 0o755)
-  console.error(`chessai: installed -> ${BIN_PATH}`)
+  fs.writeFileSync(STAMP_PATH, PKG_VERSION)
+  console.error(`chessai: installed v${PKG_VERSION} -> ${BIN_PATH}`)
+}
+
+function cachedVersion() {
+  try { return fs.readFileSync(STAMP_PATH, 'utf8').trim() } catch { return null }
 }
 
 function ensureBinary() {
-  if (fs.existsSync(BIN_PATH)) return
+  // Rebuild whenever the binary is missing or was built from a different
+  // package version — otherwise an upgrade would keep running a stale binary.
+  if (fs.existsSync(BIN_PATH) && cachedVersion() === PKG_VERSION) return
   buildFromSource()
 }
 
