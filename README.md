@@ -57,7 +57,7 @@ This design is tuned for **Claude Code subscription users**: the AI opponent is 
 Claude *subagent*, so inference is covered by your existing subscription — **no API
 key, no metered per-move billing.** The expensive part of any LLM game loop is
 context, so the whole architecture is built to keep the model's context tiny (see
-[Token economics](#token-economics)).
+[Token usage](#token-usage)).
 
 But nothing about the *game* is Claude-specific. The server and browser are plain
 Node/JS with **zero Claude dependency**. The brain is **~one function** against a
@@ -75,66 +75,30 @@ loop implementing those three calls. Nothing else changes. The `?all=1` batch
 endpoint and the `expected_ply` compare-and-swap guard mean your driver can be
 **stateless** — it never has to track games itself.
 
-## Token economics
+## Token usage
 
-The AI opponent is the only thing that spends tokens, and **the cost is context,
-not cleverness.** Two design choices keep it minimal, both measured from real
-transcripts:
+The AI opponent is the only part that spends tokens. It's built to stay light: it
+carries only the `Bash` tool and keeps no game history, so a move is a small,
+roughly fixed cost (~5–6k tokens of context per model call) instead of a context
+that grows as the game goes on.
 
-**1. Strip the tool belt.** A generic agent carries the JSON schema of every tool
-(Bash, Read, Write, Edit, Grep, Glob, …) in *every* call. `chess-ai` is
-restricted to `tools: [Bash]`, so it carries one schema, not a dozen.
+Rough mileage, to eyeball against your plan's rates:
 
-```
-Floor carried on every model call (tokens):
-  generic agent   ████████████   12.2k   (full tool belt + game history)
-  chess-ai        █████▌           5.6k   (Bash only, no history)      −54%
-```
+| Activity | Token cost |
+|---|---|
+| Engine start | ~5–6k tokens once, when the agent first loads — then cached |
+| Per move, one board | ~a few thousand new tokens; most of each call is cached context re-read cheaply |
+| Per move, multiple boards | shared — one wake plays every pending board at once |
+| Idle / walked away | ≈ nothing (polling is plain `curl`), then it **stops itself after ~24 min** |
 
-**2. Hold no state.** The server is the source of truth, so the agent never
-accumulates a growing transcript. Context stays flat instead of climbing every
-move:
+Each model call re-sends the position, but the unchanged part (rules + prior
+context) is served from cache, so a move's real cost is just the small new bit.
+The model only runs when there's actually a move to make — waiting for your move is
+a token-free `curl` loop — so leaving a game sitting costs almost nothing, and a
+forgotten game shuts itself off rather than draining tokens in the background.
 
-```
-Per-move tokens processed (active play, one board):
-  long-lived inline  ████████████████████████████████  ~81k / move
-  chess-ai           ██████████████▌                   ~37k / move      −55%
-```
-
-### Scenarios (projected from measured transcripts)
-
-**Playing one board** — ~3 model calls per move (poll → decide → post), each
-carrying ~6–12k of context. **≈ 37k tokens per move.**
-
-**Playing multiple boards** — the agent fetches *all* pending boards in one poll
-and reasons over them in a single pass, so the ~6–12k floor is paid **once per
-wake, not once per board**. Tokens per move fall as boards share the wake:
-
-```
-Tokens per move, by boards moving together:
-  1 board    ██████████████▌   ~37k
-  2 boards   ██████████        ~27k
-  3 boards   █████████         ~24k
-```
-
-**Leaving boards unattended** — when you walk away, every board waits on *white*,
-so the agent has nothing to do. It polls in ~8-minute blocking windows (free — pure
-`curl`), and **after ~24 minutes idle it stops itself.**
-
-```
-Tokens while idle:
-  no self-stop (old)  ██████████████████████  ~300k / hour — forever
-  chess-ai            ▌                       ~25k total, then 0  (stops ~24 min)
-```
-
-This is the bigger real-world win: idle drain happens exactly when you're not
-watching. A forgotten game costs a one-time ~25k tokens, then nothing — instead of
-bleeding ~300k tokens/hour indefinitely.
-
-> Numbers are grounded in real session transcripts (the `tools: [Bash]` floor and
-> per-move throughput are measured; the idle-stop and multi-board batching are
-> projected from the same floors). $-cost falls even further than raw tokens
-> because most of the context is cache reads, not writes.
+> Numbers are from recent games on Sonnet; actual cost scales with the model you
+> set in `~/.claude/agents/chess-ai.md`.
 
 ## Install
 

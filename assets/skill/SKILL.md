@@ -10,7 +10,7 @@ The human plays **white** on a browser board; a background **`chess-ai`** agent
 agent, and answer the player's questions.** All rules and state live in the server;
 every move choice lives in the agent.
 
-> Architecture, REST API, token economics and forking notes are in the repo
+> Architecture, REST API, token usage and forking notes are in the repo
 > `README.md` — you don't need any of it to run a game. Don't restate it here.
 
 ## Start a game
