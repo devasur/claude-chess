@@ -6,7 +6,7 @@
  * on recall.
  *
  *   midnight — the default: warm brass on near-black, film-noir study
- *   ivory    — light parchment + walnut, a daylit reading room
+ *   marble   — crisp cool daylight: slate squares on porcelain, high contrast
  *   emerald  — deep club green + gold, classic tournament felt
  *
  * Every theme defines the SAME token set (palette + surfaces) so adding a fourth
@@ -49,37 +49,37 @@
   --lbl-dark:  #d6c2a0;
 }
 
-/* ===== ivory (light) =================================================== */
-:root[data-theme="ivory"] {
-  --bg:        #e7ddc9;
-  --bg-2:      #f2ead9;
-  --ink:       #2c2419;
-  --ink-soft:  #6c5d47;
-  --ink-faint: #9a8b72;
-  --ink-strong:#1c1610;
-  --brass:     #a06c2c;
-  --brass-dim: #c2a36b;
-  --sq-light:  #ecdfc2;
-  --sq-dark:   #ac8351;
-  --sel:       #c6952f;
-  --last:      #caa552;
-  --check:     #c3402c;
-  --win:       #a06c2c;
-  --good:      #3f8f5a;
-  --piece-w:   #fcf8ee;
-  --piece-b:   #2a2019;
-  --panel:     rgba(255, 251, 242, .80);
-  --hair:      rgba(120, 85, 35, .26);
-  --shadow:    0 24px 60px -28px rgba(70, 48, 20, .42);
-  --body-bg:   radial-gradient(120% 90% at 28% 14%, #fbf6ea 0%, #ece1cc 50%, #dccdb0 100%), #e7ddc9;
-  --vignette:  radial-gradient(120% 100% at 50% 38%, transparent 60%, rgba(80,60,30,.16) 100%);
-  --grain:     .035;
-  --frame-bg:  linear-gradient(150deg, #c9ad7f, #a37f4e 60%);
-  --panel-grad:linear-gradient(160deg, #fbf6ea, #efe5d1);
-  --btn-bg:    linear-gradient(180deg, #f4ecdb, #e6dac1);
-  --brand-grad:linear-gradient(180deg, #8a5e29, #c08f3f);
-  --lbl-light: #8a6a45;
-  --lbl-dark:  #f6ecd4;
+/* ===== marble (light, high-contrast) =================================== */
+:root[data-theme="marble"] {
+  --bg:        #dde1e6;
+  --bg-2:      #eef1f4;
+  --ink:       #181b21;       /* near-black text — strong on porcelain */
+  --ink-soft:  #4b5360;
+  --ink-faint: #818a97;
+  --ink-strong:#0b0d11;
+  --brass:     #4f6b82;       /* slate-blue accent (this skin trades gold for steel) */
+  --brass-dim: #8ba1b3;
+  --sq-light:  #e9edf1;       /* crisp light square */
+  --sq-dark:   #738798;       /* slate dark square — clearly distinct from light */
+  --sel:       #5a86a8;
+  --last:      #6f93b0;
+  --check:     #cc4130;
+  --win:       #4f6b82;
+  --good:      #2e9159;       /* "your move" pulse */
+  --piece-w:   #fcfdff;
+  --piece-b:   #14171d;       /* deep slate-black pieces — high contrast both squares */
+  --panel:     rgba(255, 255, 255, .82);
+  --hair:      rgba(48, 68, 92, .22);
+  --shadow:    0 24px 60px -28px rgba(38, 54, 76, .40);
+  --body-bg:   radial-gradient(120% 90% at 28% 14%, #f4f6f9 0%, #e3e8ed 50%, #ccd4dd 100%), #dde1e6;
+  --vignette:  radial-gradient(120% 100% at 50% 38%, transparent 60%, rgba(40,55,78,.14) 100%);
+  --grain:     .03;
+  --frame-bg:  linear-gradient(150deg, #9aa9b8, #6e8093 60%);
+  --panel-grad:linear-gradient(160deg, #f5f7fa, #e6ebf0);
+  --btn-bg:    linear-gradient(180deg, #eef2f6, #dde4ea);
+  --brand-grad:linear-gradient(180deg, #3c5468, #6a8298);
+  --lbl-light: #56697c;
+  --lbl-dark:  #eef2f6;
 }
 
 /* ===== emerald (dark green) ============================================ */

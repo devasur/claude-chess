@@ -158,7 +158,7 @@ const VALID_ID = /^[a-z]+(?:-[a-z0-9]+)+$/                   // also guards agai
 
 // Board skins the client can render; the choice is stored per game so a recalled
 // board opens in the theme it was last played in.
-const THEMES = new Set(['midnight', 'ivory', 'emerald'])
+const THEMES = new Set(['midnight', 'marble', 'emerald'])
 const DEFAULT_THEME = 'midnight'
 
 // ---------------------------------------------------------------------------
@@ -189,13 +189,13 @@ function chessaiAgentActive() {
 function maybeWakeBlack() {
   if (blackWaiters.length === 0 || coalesceTimer) return
   if (pendingAllFor('b').length === 0) return
-  coalesceTimer = setTimeout(flushBlackWaiters, COALESCE_MS)
+  coalesceTimer = setTimeout(() => { flushBlackWaiters().catch((e) => console.error(`flush failed: ${e.message}`)) }, COALESCE_MS)
 }
-function flushBlackWaiters() {
+async function flushBlackWaiters() {
   coalesceTimer = null
   const ready = pendingAllFor('b')
   if (ready.length === 0) return        // nothing to send yet; keep them parked
-  const arr = ready.map(turnState)
+  const arr = await pendingPayload(ready)
   while (blackWaiters.length) {
     const w = blackWaiters.shift()
     clearTimeout(w.timeout)
@@ -232,6 +232,7 @@ function loadAll() {
     try {
       const g = JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), 'utf8'))
       if (g && g.id && g.board) {
+        if (g.theme === 'ivory') g.theme = 'marble'              // retired skin → its replacement
         if (!THEMES.has(g.theme)) g.theme = DEFAULT_THEME        // migrate pre-theme saves
         if (g.opponent === undefined) g.opponent = null
         games.set(g.id, g)
@@ -308,6 +309,110 @@ function indexEntry(game) {
 }
 
 // ---------------------------------------------------------------------------
+// Legality — the server is the authority. We reuse the SAME perft-validated
+// rules engine the browser uses (web/engine.js, pure ESM) via dynamic import,
+// so an LLM opponent cannot submit an illegal move (e.g. its king into check).
+// ---------------------------------------------------------------------------
+let _engine = null
+async function engine() {
+  if (!_engine) {
+    const { pathToFileURL } = require('url')
+    _engine = await import(pathToFileURL(path.join(__dirname, 'web', 'engine.js')).href)
+  }
+  return _engine
+}
+const sqOf = ([r, c]) => 'abcdefgh'[c] + (8 - r)
+
+// Legal moves for a board, as the engine sees it.
+async function legalFor(board) {
+  const E = await engine()
+  const pos = E.parseFEN(toFen(board))
+  return { E, pos, legal: E.legalMoves(pos) }
+}
+// Compact legal moves for the agent: a single space-joined SAN string (promotion
+// is encoded in the SAN itself, e.g. "e8=Q", so there is no separate field). This
+// is the smallest faithful encoding — the agent submits the SAN it picks. ~5 B per
+// move vs ~35 B for the old {from,to,san} objects.
+function legalSans(E, pos, legal) {
+  return legal.map((mv) => E.toSAN(pos, mv, legal)).join(' ')
+}
+// Resolve a submitted SAN back to its legal move. Exact match first, then a
+// check/checkmate-suffix-agnostic match (so "Qh5" matches "Qh5+").
+function matchSan(E, pos, legal, san) {
+  const norm = (s) => String(s).replace(/[+#]+$/, '')
+  const want = norm(san)
+  return legal.find((mv) => norm(E.toSAN(pos, mv, legal)) === want) || null
+}
+
+const PVAL = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 }
+
+// A plain-text board so the model doesn't have to reconstruct the position from
+// FEN in its head (the #1 cause of its blunders). Ranks 8→1, white uppercase.
+function asciiBoard(b) {
+  const rows = []
+  for (let r = 0; r < 8; r++) {
+    let line = (8 - r) + ' '
+    for (let c = 0; c < 8; c++) line += (b[r][c] || '.') + ' '
+    rows.push(line.trimEnd())
+  }
+  rows.push('  a b c d e f g h')
+  return rows.join('\n')
+}
+
+// Capture-safety hints: for every legal capture, is the target defended, and what
+// is the 1-ply material result if the opponent recaptures? Uses legalMoves on the
+// resulting position, so pinned "defenders" are correctly ignored. This is a
+// single-exchange heuristic (not full SEE), but it catches hanging-piece blunders
+// like "queen takes a defended knight". Format: "Qxb5:LOSES(-6) Nxe5:safe(+1)".
+function captureHints(E, pos, legal) {
+  const out = []
+  for (const m of legal) {
+    if (!m.cap) continue
+    const [tr, tc] = m.to
+    const gain = m.ep ? 1 : (PVAL[String(pos.b[tr][tc]).toLowerCase()] || 0)
+    const mover = PVAL[String(m.piece).toLowerCase()] || 0
+    const n = E.makeMove(pos, m)
+    const defended = E.legalMoves(n).some((x) => x.to[0] === tr && x.to[1] === tc)
+    const san = E.toSAN(pos, m, legal)
+    let tag
+    if (!defended) tag = `safe(+${gain})`
+    else { const net = gain - mover; tag = net > 0 ? `ok(+${net})` : net === 0 ? 'even' : `LOSES(${net})` }
+    out.push(`${san}:${tag}`)
+  }
+  return out.join(' ')
+}
+// Is from/to(/promo) a legal move? Promotion requires the named piece (default q).
+function isLegalMove(legal, from, to, promo) {
+  const cands = legal.filter((mv) => sqOf(mv.from) === from && sqOf(mv.to) === to)
+  if (!cands.length) return false
+  if (cands[0].promo) return cands.some((mv) => mv.promo === (promo || 'q'))
+  return true
+}
+// Per-board payload for the agent: what it needs to reason and submit — id, fen, a
+// rendered board (so it doesn't misread FEN), the ply to stamp, what white just
+// played, the check flag, the legal replies (compact SAN), and capture-safety hints
+// that flag hanging-piece blunders. Omits turnState's name/turn/status/last_from/
+// last_to (redundant). The browser uses fullState, not this, so this stays lean.
+async function pendingPayload(list) {
+  const out = []
+  for (const g of list) {
+    const { E, pos, legal } = await legalFor(g.board)
+    const last = g.history[g.history.length - 1] || {}
+    out.push({
+      id: g.id,
+      fen: toFen(g.board),
+      board: asciiBoard(pos.b),
+      move_count: g.history.length,
+      last_san: last.san || '',
+      in_check: E.inCheck(pos),
+      legal: legalSans(E, pos, legal),
+      captures: captureHints(E, pos, legal),
+    })
+  }
+  return out
+}
+
+// ---------------------------------------------------------------------------
 // HTTP
 // ---------------------------------------------------------------------------
 const BOARD_HTML = (() => {
@@ -378,9 +483,9 @@ const server = http.createServer(async (req, res) => {
     // wait=1 (black only): if nothing's pending, hold the connection open instead
     // of returning [] — woken in a coalesced batch when a move creates work.
     if (ready.length === 0 && wait && side === 'b') return parkBlackWaiter(req, res, all)
-    if (all) return sendJson(res, 200, ready.map(turnState))
-    const g = ready[0] || null
-    return sendJson(res, 200, g ? turnState(g) : { id: null })
+    const payload = await pendingPayload(ready)
+    if (all) return sendJson(res, 200, payload)
+    return sendJson(res, 200, payload[0] || { id: null })
   }
 
   // ---- games collection ----
@@ -430,35 +535,61 @@ const server = http.createServer(async (req, res) => {
 
     if (m === 'POST' && action === 'move') {
       const body = await readBody(req)
-      if (!body || !body.from || !body.to) return sendJson(res, 400, { error: 'need from + to' })
+      if (!body || (!body.san && !(body.from && body.to))) return sendJson(res, 400, { error: 'need san or from + to' })
       // Compare-and-swap guard: reject a move computed against a stale position
       // (the agent passes the move_count it reasoned from). Keeps a multiplexed
       // agent from double-moving without it tracking any per-game state.
       if (body.expected_ply != null && body.expected_ply !== game.history.length) {
         return sendJson(res, 409, { error: 'stale move', move_count: game.history.length })
       }
+      // Legality gate: the server is the authority. The agent submits a SAN (picked
+      // from the legal list it was given); the browser submits from/to. Either way
+      // we resolve to a concrete move and reject anything not in the legal set,
+      // returning the legal SANs so the caller can correct.
+      let from, to, promotion, san
+      {
+        const { E, pos, legal } = await legalFor(game.board)
+        if (body.san) {
+          const mv = matchSan(E, pos, legal, body.san)
+          if (!mv) return sendJson(res, 400, { error: 'illegal move', in_check: E.inCheck(pos), legal: legalSans(E, pos, legal) })
+          from = sqOf(mv.from); to = sqOf(mv.to); promotion = mv.promo || null; san = E.toSAN(pos, mv, legal)
+        } else {
+          if (!isLegalMove(legal, body.from, body.to, (body.promotion || '').toLowerCase())) {
+            return sendJson(res, 400, { error: 'illegal move', in_check: E.inCheck(pos), legal: legalSans(E, pos, legal) })
+          }
+          from = body.from; to = body.to; promotion = body.promotion || null
+          const mv = legal.find((x) => sqOf(x.from) === from && sqOf(x.to) === to && (!x.promo || x.promo === (promotion || 'q')))
+          san = body.san || (mv ? E.toSAN(pos, mv, legal) : null)
+        }
+      }
       const color = game.board.side
       const number = game.board.full
       try {
-        applyMove(game.board, body.from, body.to, body.promotion)
+        applyMove(game.board, from, to, promotion)
       } catch (e) {
         return sendJson(res, 400, { error: e.message })
       }
       game.history.push({
         number, color,
-        from: body.from, to: body.to,
-        san: body.san || null,
-        promotion: body.promotion || null,
+        from, to,
+        san: san || null,
+        promotion: promotion || null,
         comment: body.comment || null,
         reasoning: body.reasoning || null,
         by: body.by || 'human',
         fen: toFen(game.board),
       })
       // an AI move may carry the opponent's identity — record it as we see it.
-      if ((body.by || 'human') === 'ai' && (body.model || body.harness || body.opponent)) {
+      const isAi = (body.by || 'human') === 'ai'
+      if (isAi && (body.model || body.harness || body.opponent)) {
         game.opponent = mergeOpponent(game.opponent, body)
       }
       touch(game)
+      // The browser drives its whole UI off fullState (history, theme, opponent), so
+      // it gets the full snapshot. The AI agent only needs to know the move landed —
+      // echoing the ever-growing history back to it is the single biggest source of
+      // its context growth (quadratic over a game). Give it a flat ~80 B ack instead.
+      if (isAi) return sendJson(res, 200, { ok: true, id: game.id, move_count: game.history.length, san, status: game.status })
       return sendJson(res, 200, fullState(game))
     }
   }

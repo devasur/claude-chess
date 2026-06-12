@@ -186,7 +186,7 @@ with `CHESSAI_DATA_DIR`) and reload when the server restarts.
 | POST | `/api/games/<id>/move` | `{ from, to, san?, promotion?, by?, expected_ply?, harness?, model?, comment?, reasoning? }` |
 | POST | `/api/games/<id>/reset` | reset to the starting position |
 | POST | `/api/games/<id>/status` | `{ status }` — end the game |
-| POST | `/api/games/<id>/theme` | `{ theme }` — `midnight \| ivory \| emerald` |
+| POST | `/api/games/<id>/theme` | `{ theme }` — `midnight \| marble \| emerald` |
 | POST | `/api/games/<id>/opponent` | `{ harness?, model?, name? }` — who plays black |
 | DELETE | `/api/games/<id>` | delete the game and its saved file |
 

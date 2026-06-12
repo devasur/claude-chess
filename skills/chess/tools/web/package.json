@@ -1,0 +1,5 @@
+{
+  "type": "module",
+  "private": true,
+  "//": "Marks the browser ES modules (engine.js, api.js, view.js, app.js) as ESM so server.cjs can dynamically import engine.js for server-side move legality. Not published; the board loads these as <script type=module> regardless."
+}

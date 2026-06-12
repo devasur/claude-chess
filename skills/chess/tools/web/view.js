@@ -92,27 +92,22 @@ function paintStatus(state) {
   if (server.status && server.status !== 'playing') {
     cls += /win/i.test(server.status) ? ' win' : ' over';
     label = `<b>${esc(server.status)}</b>`;
+  } else if (state.agentActive !== true) {
+    // Opponent not serving yet (startup) or stopped (idle self-stop): this block
+    // IS the readiness indicator, so we never show a cheerful "Your move" while
+    // there's no player behind the board.
+    cls += ' connecting';
+    label = pos.turn === 'w'
+      ? `<b>Connecting ${ai}…</b><small>play your move once it's ready</small>`
+      : `<b>Connecting ${ai}…</b><small>opponent is starting up</small>`;
   } else if (pos.turn === 'w') {
     cls += checked ? ' check' : ' you';
     label = checked ? '<b>Check — defend your king</b>' : '<b>Your move</b><small>white to play</small>';
-  } else if (state.agentActive === false) {
-    // black to move, but no agent is serving yet — the real "no opponent" gap.
-    cls += ' ai connecting';
-    label = `<b>Waiting for ${ai} to connect…</b><small>your move is in</small>`;
   } else {
     cls += checked ? ' check' : ' ai';
     label = checked ? `<b>You have ${ai} in check</b><small>black to respond</small>` : `<b>${ai} is thinking…</b><small>black to play</small>`;
   }
   el.className = cls; txt.innerHTML = label;
-}
-
-// Opponent-readiness dot, driven by the /api/health poll (independent of game
-// state). true = an agent is serving black; false = connecting; null = unknown.
-export function setOpponentStatus(active) {
-  const dot = $('oppDot');
-  if (!dot) return;
-  dot.className = 'oppdot ' + (active === true ? 'ready' : active === false ? 'connecting' : 'unknown');
-  dot.title = active === true ? 'opponent connected' : active === false ? 'opponent connecting…' : 'checking…';
 }
 
 function counts(pos, color) {

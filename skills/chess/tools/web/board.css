@@ -8,7 +8,13 @@
  * --cell is the one structural token kept here (board sizing is layout, not
  * skin); the responsive override at the bottom shrinks it on narrow screens.
  */
-:root { --cell: 72px; }
+/* the board sits between the top bar and the controls strip, beside the rail — so
+   it's bounded by the leftover HEIGHT (viewport minus top bar, controls, gaps and
+   padding) AND by the leftover WIDTH (viewport minus the rail and gutters). It
+   never overflows either axis. */
+:root { --cell: clamp(40px, min((100vh - 232px) / 8, (100vw - 484px) / 8), 92px); }
+/* --rail: the fixed width of the right-hand column. */
+:root { --rail: clamp(304px, 25vw, 360px); }
 
 /* ===== layout shell ===================================================== */
 * { box-sizing: border-box; }
@@ -18,15 +24,52 @@ body {
   font-family: "Spline Sans", system-ui, sans-serif;
   color: var(--ink);
   background: var(--body-bg);
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: clamp(20px, 4vw, 56px);
-  padding: 40px 36px;
+  height: 100vh;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
+
+/* a 2×3 grid:
+     topbar    topbar     ← full-width header, horizontal
+     board     rail        ← board left, rail spans the two lower rows on the right
+     controls  rail        ← controls strip directly under the board */
+.app {
+  position: relative; z-index: 2; height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rail);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "topbar   topbar"
+    "board    rail"
+    "controls rail";
+  column-gap: clamp(22px, 2.8vw, 40px);
+  row-gap: clamp(16px, 2vh, 24px);
+  padding: clamp(20px, 2.6vh, 32px) clamp(24px, 2.8vw, 40px);
+}
+
+/* TOP — brand + status stacked on the left, identity + skins top-right */
+.topbar { grid-area: topbar; display:flex; align-items:flex-start; justify-content:space-between;
+  gap: clamp(14px, 2vw, 28px); padding-bottom: clamp(14px, 1.8vh, 20px); border-bottom: 1px solid var(--hair); }
+.topbar-left { display:flex; flex-direction:column; gap: 9px; min-width: 0; }
+.topbar-right { display:flex; align-items:center; flex-wrap: wrap; justify-content:flex-end; gap: clamp(12px, 1.4vw, 20px); padding-top: 4px; }
+
+/* the board, centred in whatever space the grid leaves it */
+.board-pane { grid-area: board; display:flex; align-items:center; justify-content:center; min-width: 0; min-height: 0; }
+
+/* RIGHT — the rail: seat + trays are fixed-height; the move log flexes to fill so
+   it is always the tallest element and never "disappears". */
+.rail {
+  grid-area: rail; min-height: 0;
+  display:flex; flex-direction:column; gap: 13px;
+  padding-left: clamp(18px, 2vw, 28px);
+  border-left: 1px solid var(--hair);
+}
+.rail .seat, .rail .trays { flex: none; }
+.rail .trays { padding-bottom: 11px; border-bottom: 1px solid var(--hair); }
+
+/* controls strip, directly under the board */
+.controls { grid-area: controls; }
+
 /* film grain + vignette atmosphere */
 body::before {
   content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 50;
@@ -125,44 +168,37 @@ body::after {
   -webkit-text-stroke: 1.1px rgba(255,242,214,.16); }
 .piece.moving { z-index: 5; transition: transform .26s cubic-bezier(.22,.61,.36,1); }
 
-/* ===== side rail ======================================================= */
-.rail { position: relative; z-index: 2; width: 320px; display: flex; flex-direction: column; gap: 18px;
-  opacity: 0; animation: rise .9s cubic-bezier(.2,.8,.2,1) .18s forwards; }
-.brand { display:flex; align-items: baseline; gap: 10px; }
+/* ===== brand + identity ================================================ */
+.brand { display:flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .brand h1 { margin: 0; font-family: "Fraunces", serif; font-optical-sizing: auto;
-  font-weight: 600; font-size: 34px; letter-spacing: .5px; line-height: .9;
+  font-weight: 600; font-size: clamp(25px, 2.6vw, 31px); letter-spacing: .4px; line-height: .9;
   background: var(--brand-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.brand .mark { font-family:"Fraunces",serif; font-style:italic; font-weight:400; color: var(--ink-soft); font-size: 15px; }
 .seat { font: 500 11px/1 "Spline Sans Mono", monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-faint); }
 
-/* opponent-readiness dot in the seat line — fed by the /api/health poll */
-.oppdot { display:inline-block; width: 7px; height: 7px; border-radius: 50%; vertical-align: middle;
-  margin: 0 .1em 0 .45em; background: var(--ink-faint); }
-.oppdot.ready { background: var(--good); box-shadow: 0 0 7px color-mix(in srgb, var(--good) 70%, transparent); }
-.oppdot.connecting { background: var(--brass); animation: blink 1.1s steps(2) infinite; }
-.oppdot.unknown { background: var(--ink-faint); opacity: .45; }
-
 /* the game's unique three-word name */
-.gamechip { display:inline-flex; align-items:center; gap: 8px; margin-top: 12px;
+.gamechip { display:inline-flex; align-items:center; gap: 8px; flex: none; align-self: flex-start;
   padding: 6px 12px; border-radius: 999px; background: var(--panel); border: 1px solid var(--hair);
   font: 500 12px/1 "Spline Sans Mono", monospace; letter-spacing: .06em; color: var(--brass); }
 .gamechip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brass); flex:none;
   box-shadow: 0 0 8px color-mix(in srgb, var(--brass) 70%, transparent); }
 
-.status { display:flex; align-items:center; gap: 11px; padding: 13px 16px; border-radius: 12px;
-  background: var(--panel); border: 1px solid var(--hair); backdrop-filter: blur(6px);
-  font-weight: 500; letter-spacing: .2px; }
-.status .orb { width: 11px; height: 11px; border-radius: 50%; flex: none;
+/* status sits under the brand line as a clean, borderless live indicator: a
+   pulsing orb + a bold title, with an optional faint helper line beneath. */
+.status { display:flex; align-items:flex-start; gap: 9px; padding: 0;
+  background: none; border: none; backdrop-filter: none; font-weight: 500; letter-spacing: .2px; }
+.status .orb { width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; flex: none;
   background: var(--brass); box-shadow: 0 0 0 0 currentColor; color: var(--brass); }
+.status .txt b { font: 600 14px/1.25 "Spline Sans", sans-serif; color: var(--ink); }
 .status.you .orb { color: var(--good); background: var(--good); animation: breathe 2.4s ease-in-out infinite; }
 .status.ai  .orb { color: var(--brass); background: var(--brass); animation: blink 1s steps(2) infinite; }
+.status.connecting .orb { color: var(--brass); background: var(--brass); animation: breathe 1.4s ease-in-out infinite; }
 .status.check .orb, .status.over .orb { color: var(--check); background: var(--check); }
 .status.win .orb { color: var(--win); background: var(--win); }
 @keyframes breathe { 0%,100%{ box-shadow:0 0 0 0 color-mix(in srgb,currentColor 60%,transparent) } 50%{ box-shadow:0 0 0 6px transparent } }
 @keyframes blink { 50% { opacity:.25 } }
-.status .txt small { display:block; color: var(--ink-faint); font: 400 11px/1.3 "Spline Sans", sans-serif; margin-top: 3px; }
+.status .txt small { display:block; color: var(--ink-faint); font: 400 11px/1.3 "Spline Sans", sans-serif; margin-top: 2px; }
 
-.trays { display:flex; flex-direction: column; gap: 8px; }
+.trays { display:flex; flex-direction: column; gap: 8px; flex: none; }
 .tray { display:flex; align-items:center; gap: 10px; min-height: 30px; }
 .tray .who { font: 500 10px/1 "Spline Sans Mono", monospace; letter-spacing:.12em; text-transform: uppercase; color: var(--ink-faint); width: 52px; flex:none; }
 .tray .caps { display:flex; flex-wrap: wrap; gap: 1px; font-size: 19px; line-height: 1; min-height: 20px; }
@@ -170,7 +206,7 @@ body::after {
 .tray .adv { margin-left: auto; font: 600 12px "Spline Sans Mono", monospace; color: var(--brass); }
 
 .log { background: var(--panel); border:1px solid var(--hair); border-radius: 12px; backdrop-filter: blur(6px);
-  flex: 1 1 auto; min-height: 130px; max-height: 332px; overflow:auto; padding: 6px; }
+  flex: 1 1 auto; min-height: 96px; overflow:auto; padding: 6px; }
 .log::-webkit-scrollbar { width: 8px; } .log::-webkit-scrollbar-thumb { background: var(--brass-dim); border-radius: 8px; }
 .ply { display:grid; grid-template-columns: 30px 1fr 1fr; align-items: start; gap: 6px; padding: 5px 8px; border-radius: 8px; }
 .ply:nth-child(odd) { background: rgba(255,255,255,.018); }
@@ -183,10 +219,14 @@ body::after {
 .log .empty-state { color: var(--ink-faint); font-size: 13px; padding: 14px; text-align:center; font-style: italic; }
 
 /* ===== controls ======================================================== */
-.controls { display:flex; gap: 9px; }
+/* a horizontal strip under the board; four equal buttons, New board accented */
+.controls { display:flex; gap: clamp(9px, 1vw, 14px); }
+.controls #btnNew { color: var(--ink-strong);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brass) 26%, var(--btn-bg)), var(--btn-bg));
+  border-color: color-mix(in srgb, var(--brass) 50%, transparent); }
 button { flex:1; cursor:pointer; font: 500 13px "Spline Sans", sans-serif; letter-spacing:.2px;
   color: var(--ink); background: var(--btn-bg);
-  border: 1px solid var(--hair); border-radius: 10px; padding: 11px 8px; transition: .16s; }
+  border: 1px solid var(--hair); border-radius: 10px; padding: 12px 10px; transition: .16s; }
 button:hover { border-color: color-mix(in srgb,var(--brass) 60%, transparent); color: var(--ink-strong); transform: translateY(-1px); }
 button.ghost { background: transparent; }
 button:active { transform: translateY(0); }
@@ -256,14 +296,31 @@ button:active { transform: translateY(0); }
   border: 1px solid var(--hair); position: relative; overflow: hidden; transition: .15s; }
 .skin::before { content:""; position:absolute; inset:0; } /* board-ish preview */
 .skin[data-theme="midnight"]::before { background: linear-gradient(135deg, #d8c4a0 0 50%, #5a4031 50% 100%); }
-.skin[data-theme="ivory"]::before    { background: linear-gradient(135deg, #ecdfc2 0 50%, #ac8351 50% 100%); }
+.skin[data-theme="marble"]::before   { background: linear-gradient(135deg, #e7ebf0 0 50%, #74879a 50% 100%); }
 .skin[data-theme="emerald"]::before  { background: linear-gradient(135deg, #d9c9a3 0 50%, #3f6b4f 50% 100%); }
 .skin:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--brass) 60%, transparent); }
 .skin.active { border-color: var(--brass); box-shadow: 0 0 0 2px color-mix(in srgb, var(--brass) 45%, transparent); }
 
 /* ===== responsive ====================================================== */
-@media (max-width: 940px) {
-  body { flex-direction: column; gap: 24px; padding: 24px; }
-  :root { --cell: 40px; }
-  .rail { width: min(92vw, 360px); }
+/* narrow windows: drop the two-pane split, stack the board over the rail, and let
+   the page scroll. The board sizes to the available width. */
+@media (max-width: 880px) {
+  :root { --cell: clamp(34px, (100vw - 56px) / 8, 70px); }
+  body { overflow: auto; }
+  .app {
+    height: auto; min-height: 100vh;
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    grid-template-areas: "topbar" "board" "controls" "rail";
+    row-gap: 18px;
+  }
+  .topbar { flex-wrap: wrap; }
+  .topbar-right { justify-content: flex-start; }
+  .board-pane { padding-bottom: 4px; }
+  .rail {
+    min-height: 0;
+    padding-left: 0; border-left: none;
+    border-top: 1px solid var(--hair); padding-top: 18px;
+  }
+  .log { flex: none; min-height: 200px; max-height: 46vh; }
 }

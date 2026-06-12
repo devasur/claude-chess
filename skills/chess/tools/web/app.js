@@ -156,11 +156,9 @@ async function pollHealth() {
   try {
     const h = await api.health();
     const active = !!h.chessai_agent_active;
-    if (active !== ui.agentActive) { ui.agentActive = active; if (ui.server) render(); } // refresh status pill
-    view.setOpponentStatus(ui.agentActive);
+    if (active !== ui.agentActive) { ui.agentActive = active; if (ui.server) render(); } // refresh the status block
   } catch (e) {
     if (ui.agentActive !== null) { ui.agentActive = null; if (ui.server) render(); }
-    view.setOpponentStatus(null);
   }
 }
 
