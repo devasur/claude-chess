@@ -1,226 +1,31 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="midnight">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>chessai · midnight study</title>
+
+<!-- type: Fraunces (display) + Spline Sans (body) + Spline Sans Mono (data) -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..600&family=Spline+Sans:wght@400;500;600&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --cell: 72px;
-    --bg:        #100d0b;
-    --bg-2:      #1a1512;
-    --ink:       #ece2d0;
-    --ink-soft:  #a99d88;
-    --ink-faint: #6f6557;
-    --brass:     #cda24e;
-    --brass-dim: #8c6f37;
-    --sq-light:  #d8c4a0;
-    --sq-dark:   #5a4031;
-    --sel:       #d9b25a;
-    --last:      #b98f3e;
-    --check:     #d8523a;
-    --win:       #cda24e;
-    --piece-w:   #f6edd6;
-    --piece-b:   #14100d;
-    --panel:     rgba(28,22,18,.72);
-    --hair:      rgba(205,162,78,.22);
-    --shadow:    0 28px 70px -28px rgba(0,0,0,.85);
-  }
-  * { box-sizing: border-box; }
-  html, body { height: 100%; }
-  body {
-    margin: 0;
-    font-family: "Spline Sans", system-ui, sans-serif;
-    color: var(--ink);
-    background:
-      radial-gradient(120% 90% at 28% 14%, #2a201a 0%, #160f0c 46%, #0b0807 100%),
-      var(--bg);
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: clamp(20px, 4vw, 56px);
-    padding: 40px 36px;
-    overflow: hidden;
-    -webkit-font-smoothing: antialiased;
-  }
-  /* film grain + vignette atmosphere */
-  body::before {
-    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 50;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.45'/%3E%3C/svg%3E");
-    opacity: .05; mix-blend-mode: overlay;
-  }
-  body::after {
-    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 49;
-    background: radial-gradient(120% 100% at 50% 38%, transparent 52%, rgba(0,0,0,.55) 100%);
-  }
 
-  /* ---- board ---- */
-  .stage { position: relative; z-index: 2; opacity: 0; animation: rise .9s cubic-bezier(.2,.8,.2,1) .05s forwards; }
-  @keyframes rise { from { opacity:0; transform: translateY(14px); } to { opacity:1; transform:none; } }
-
-  .frame {
-    position: relative;
-    padding: 30px;
-    border-radius: 10px;
-    background:
-      linear-gradient(150deg, #241a13, #140d09 60%);
-    box-shadow: var(--shadow), inset 0 0 0 1px rgba(0,0,0,.6), inset 0 0 0 2px var(--hair);
-  }
-  .frame::before {
-    content: ""; position: absolute; inset: 16px; border-radius: 4px;
-    border: 1px solid var(--hair);
-    box-shadow: inset 0 0 22px rgba(0,0,0,.6);
-    pointer-events: none;
-  }
-  #board {
-    position: relative;
-    width: calc(var(--cell) * 8);
-    height: calc(var(--cell) * 8);
-    display: grid;
-    grid-template-columns: repeat(8, var(--cell));
-    grid-template-rows: repeat(8, var(--cell));
-    border-radius: 3px;
-    overflow: hidden;
-    box-shadow: 0 2px 0 rgba(255,255,255,.04), 0 -2px 18px rgba(0,0,0,.5) inset;
-  }
-  .sq {
-    position: relative;
-    display: flex; align-items: center; justify-content: center;
-    cursor: default;
-  }
-  .sq.light { background:
-      linear-gradient(150deg, color-mix(in srgb, var(--sq-light) 92%, #fff) 0%, var(--sq-light) 60%, color-mix(in srgb, var(--sq-light) 86%, #000) 100%); }
-  .sq.dark  { background:
-      linear-gradient(150deg, color-mix(in srgb, var(--sq-dark) 88%, #fff 12%) 0%, var(--sq-dark) 55%, color-mix(in srgb, var(--sq-dark) 80%, #000) 100%); }
-
-  .sq .lbl { position: absolute; font: 600 10px/1 "Spline Sans Mono", monospace; letter-spacing:.04em; opacity:.62; }
-  .sq .lbl.file { bottom: 4px; right: 5px; }
-  .sq .lbl.rank { top: 4px; left: 5px; }
-  .sq.light .lbl { color: #6a4a32; }
-  .sq.dark  .lbl { color: #d6c2a0; }
-
-  /* state layers */
-  .sq.sel::after,
-  .sq.last::after {
-    content: ""; position: absolute; inset: 0; pointer-events: none;
-  }
-  .sq.last::after { background: radial-gradient(120% 120% at 50% 50%, color-mix(in srgb, var(--last) 42%, transparent), transparent 78%); box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--last) 55%, transparent); }
-  .sq.sel::after  { box-shadow: inset 0 0 0 3px var(--sel), inset 0 0 26px color-mix(in srgb, var(--sel) 40%, transparent); }
-  .sq.check .piece { animation: checkpulse 1.1s ease-in-out infinite; }
-  .sq.check::after { content:""; position:absolute; inset:0; box-shadow: inset 0 0 0 3px var(--check), inset 0 0 30px color-mix(in srgb,var(--check) 55%, transparent); animation: checkpulse 1.1s ease-in-out infinite; }
-  @keyframes checkpulse { 0%,100%{ opacity:.55 } 50%{ opacity:1 } }
-
-  /* legal move markers */
-  .hint { position: absolute; inset: 0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
-  .hint .dot { width: 28%; height: 28%; border-radius: 50%;
-    background: radial-gradient(circle at 38% 34%, rgba(255,248,228,.5), color-mix(in srgb,var(--brass) 70%, transparent));
-    box-shadow: 0 0 10px color-mix(in srgb,var(--brass) 60%, transparent);
-    animation: pop .25s ease-out; }
-  .hint.capture { box-shadow: inset 0 0 0 4px color-mix(in srgb, var(--brass) 78%, transparent); border-radius: 0; }
-  .hint.capture .dot { display:none; }
-  @keyframes pop { from { transform: scale(.2); opacity:0 } to { transform: scale(1); opacity:1 } }
-
-  .sq.playable { cursor: pointer; }
-  .sq.playable:hover .piece { transform: translateY(-3px) scale(1.04); }
-
-  .piece {
-    font-size: calc(var(--cell) * .78);
-    line-height: 1;
-    font-family: "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols2", serif;
-    transition: transform .18s cubic-bezier(.2,.8,.2,1);
-    will-change: transform;
-    user-select: none;
-    position: relative; z-index: 2;
-  }
-  .piece-w { color: var(--piece-w);
-    text-shadow: 0 1px 0 #fff8, 0 2px 4px rgba(0,0,0,.45), 0 6px 10px rgba(0,0,0,.35);
-    -webkit-text-stroke: 1.1px rgba(60,40,22,.55); }
-  .piece-b { color: var(--piece-b);
-    text-shadow: 0 1px 0 rgba(255,255,255,.16), 0 2px 6px rgba(0,0,0,.6);
-    -webkit-text-stroke: 1.1px rgba(255,242,214,.16); }
-  .piece.moving { z-index: 5; transition: transform .26s cubic-bezier(.22,.61,.36,1); }
-
-  /* ---- side rail ---- */
-  .rail { position: relative; z-index: 2; width: 320px; display: flex; flex-direction: column; gap: 18px;
-    opacity: 0; animation: rise .9s cubic-bezier(.2,.8,.2,1) .18s forwards; }
-  .brand { display:flex; align-items: baseline; gap: 10px; }
-  .brand h1 { margin: 0; font-family: "Fraunces", serif; font-optical-sizing: auto;
-    font-weight: 600; font-size: 34px; letter-spacing: .5px; line-height: .9;
-    background: linear-gradient(180deg, #f3e6c8, #c79a44); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .brand .mark { font-family:"Fraunces",serif; font-style:italic; font-weight:400; color: var(--ink-soft); font-size: 15px; }
-  .seat { font: 500 11px/1 "Spline Sans Mono", monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-faint); }
-
-  .status { display:flex; align-items:center; gap: 11px; padding: 13px 16px; border-radius: 12px;
-    background: var(--panel); border: 1px solid var(--hair); backdrop-filter: blur(6px);
-    font-weight: 500; letter-spacing: .2px; }
-  .status .orb { width: 11px; height: 11px; border-radius: 50%; flex: none;
-    background: var(--brass); box-shadow: 0 0 0 0 currentColor; color: var(--brass); }
-  .status.you .orb { color:#86c08a; background:#86c08a; animation: breathe 2.4s ease-in-out infinite; }
-  .status.ai  .orb { color: var(--brass); background: var(--brass); animation: blink 1s steps(2) infinite; }
-  .status.check .orb, .status.over .orb { color: var(--check); background: var(--check); }
-  .status.win .orb { color: var(--win); background: var(--win); }
-  @keyframes breathe { 0%,100%{ box-shadow:0 0 0 0 color-mix(in srgb,currentColor 60%,transparent) } 50%{ box-shadow:0 0 0 6px transparent } }
-  @keyframes blink { 50% { opacity:.25 } }
-  .status .txt small { display:block; color: var(--ink-faint); font: 400 11px/1.3 "Spline Sans", sans-serif; margin-top: 3px; }
-
-  .trays { display:flex; flex-direction: column; gap: 8px; }
-  .tray { display:flex; align-items:center; gap: 10px; min-height: 30px; }
-  .tray .who { font: 500 10px/1 "Spline Sans Mono", monospace; letter-spacing:.12em; text-transform: uppercase; color: var(--ink-faint); width: 52px; flex:none; }
-  .tray .caps { display:flex; flex-wrap: wrap; gap: 1px; font-size: 19px; line-height: 1; min-height: 20px; }
-  .tray .caps .pw { color: #efe6cf; } .tray .caps .pb { color:#0e0b09; -webkit-text-stroke:.6px #cda24e55; }
-  .tray .adv { margin-left: auto; font: 600 12px "Spline Sans Mono", monospace; color: var(--brass); }
-
-  .log { background: var(--panel); border:1px solid var(--hair); border-radius: 12px; backdrop-filter: blur(6px);
-    flex: 1 1 auto; min-height: 130px; max-height: 332px; overflow:auto; padding: 6px; }
-  .log::-webkit-scrollbar { width: 8px; } .log::-webkit-scrollbar-thumb { background: var(--brass-dim); border-radius: 8px; }
-  .ply { display:grid; grid-template-columns: 30px 1fr 1fr; align-items: start; gap: 6px; padding: 5px 8px; border-radius: 8px; }
-  .ply:nth-child(odd) { background: rgba(255,255,255,.018); }
-  .ply .no { font: 500 12px/1.6 "Spline Sans Mono", monospace; color: var(--ink-faint); }
-  .ply .mv { font: 500 14px/1.5 "Spline Sans Mono", monospace; color: var(--ink); }
-  .ply .mv.empty { color: var(--ink-faint); }
-  .note { grid-column: 2 / 4; margin-top: 2px; font: 400 12px/1.4 "Spline Sans", sans-serif; color: var(--brass);
-    font-style: italic; }
-  .note .why { display:block; color: var(--ink-faint); font-style: normal; font-size: 11px; margin-top:2px; }
-  .log .empty-state { color: var(--ink-faint); font-size: 13px; padding: 14px; text-align:center; font-style: italic; }
-
-  .controls { display:flex; gap: 9px; }
-  button { flex:1; cursor:pointer; font: 500 13px "Spline Sans", sans-serif; letter-spacing:.2px;
-    color: var(--ink); background: linear-gradient(180deg, #2a221b, #1d1611);
-    border: 1px solid var(--hair); border-radius: 10px; padding: 11px 8px; transition: .16s; }
-  button:hover { border-color: color-mix(in srgb,var(--brass) 60%, transparent); color:#fff; transform: translateY(-1px); }
-  button.ghost { background: transparent; }
-  button:active { transform: translateY(0); }
-
-  /* promotion modal */
-  .veil { position: fixed; inset:0; z-index: 60; display:none; align-items:center; justify-content:center;
-    background: rgba(8,6,4,.6); backdrop-filter: blur(3px); }
-  .veil.show { display:flex; animation: pop .2s ease-out; }
-  .promo { background: linear-gradient(160deg, #241a13, #150e0a); border:1px solid var(--hair);
-    border-radius: 16px; padding: 22px 24px; box-shadow: var(--shadow); text-align:center; }
-  .promo h3 { margin: 0 0 4px; font-family:"Fraunces",serif; font-weight:500; font-size: 20px; color: var(--ink); }
-  .promo p { margin: 0 0 16px; color: var(--ink-faint); font-size: 12px; }
-  .promo .opts { display:flex; gap: 10px; }
-  .promo .opt { width: 64px; height: 64px; display:flex; align-items:center; justify-content:center;
-    font-size: 44px; border-radius: 12px; cursor:pointer; border:1px solid var(--hair);
-    background: var(--sq-light); color: var(--piece-w); -webkit-text-stroke: 1px rgba(60,40,22,.55); transition:.15s; }
-  .promo .opt:hover { transform: translateY(-3px) scale(1.05); box-shadow: 0 10px 22px -8px #000; border-color: var(--brass); }
-
-  @media (max-width: 940px) { body { flex-direction: column; gap: 24px; padding: 24px; } :root { --cell: 40px; } .rail { width: min(92vw, 360px); } }
-</style>
+<!-- styling: theme.css holds the swappable design tokens; board.css the structure -->
+<link rel="stylesheet" href="/web/theme.css">
+<link rel="stylesheet" href="/web/board.css">
 </head>
 <body>
+  <!-- board: populated by view.js -->
   <div class="stage">
     <div class="frame"><div id="board"></div></div>
   </div>
 
+  <!-- side rail: brand, status, capture trays, move log, controls -->
   <aside class="rail">
     <div>
       <div class="brand"><h1>chessai</h1><span class="mark">midnight study</span></div>
-      <div class="seat">you · ivory &nbsp;—&nbsp; claude · obsidian</div>
+      <div class="seat">you · white &nbsp;—&nbsp; <span id="opponent">Chessai</span> · black</div>
+      <div class="gamechip"><span class="dot"></span><span id="gameName">…</span></div>
     </div>
 
     <div id="status" class="status you">
@@ -229,389 +34,40 @@
     </div>
 
     <div class="trays">
-      <div class="tray"><span class="who">claude</span><span class="caps" id="capByYou"></span><span class="adv" id="advYou"></span></div>
+      <div class="tray"><span class="who">Chessai</span><span class="caps" id="capByYou"></span><span class="adv" id="advYou"></span></div>
       <div class="tray"><span class="who">you</span><span class="caps" id="capByAi"></span><span class="adv" id="advAi"></span></div>
     </div>
 
     <div class="log" id="log"><div class="empty-state">The first move is yours. Click a piece to begin.</div></div>
 
+    <div class="skins" id="skins">
+      <span class="lbl">skin</span>
+      <button class="skin" data-theme="midnight" title="Midnight"></button>
+      <button class="skin" data-theme="ivory" title="Ivory"></button>
+      <button class="skin" data-theme="emerald" title="Emerald"></button>
+    </div>
+
     <div class="controls">
-      <button onclick="newGame()">New game</button>
-      <button class="ghost" onclick="flip()">Flip</button>
-      <button class="ghost" onclick="resign()">Resign</button>
+      <button id="btnNew">New board</button>
+      <button id="btnGames" class="ghost">Games</button>
+      <button id="btnFlip" class="ghost">Flip</button>
+      <button id="btnResign" class="ghost">Resign</button>
     </div>
   </aside>
 
+  <!-- promotion modal: option buttons filled in by view.js -->
   <div class="veil" id="veil"><div class="promo">
     <h3>Promote</h3><p>Choose a piece for your pawn</p>
     <div class="opts" id="promoOpts"></div>
   </div></div>
 
-<script>
-//=== ENGINE START ===  (pure, DOM-free chess logic — validated with perft)
-const FILES = 'abcdefgh';
-const inb = (r,c) => r>=0 && r<8 && c>=0 && c<8;
-const sqName = (r,c) => FILES[c] + (8-r);
-const parseSquare = (s) => ({ c: FILES.indexOf(s[0]), r: 8 - parseInt(s[1],10) });
-const colorOf = (p) => p ? (p === p.toUpperCase() ? 'w' : 'b') : null;
-const other = (c) => c === 'w' ? 'b' : 'w';
+  <!-- games picker: rows filled in by view.js -->
+  <div class="veil" id="gamesVeil"><div class="sheet">
+    <h3>Your games</h3><p>Pick a board to view, or open a new one in its own window.</p>
+    <div class="games" id="gamesList"></div>
+  </div></div>
 
-function parseFEN(fen) {
-  const [place, turn, cr, ep] = fen.split(' ');
-  const b = place.split('/').map(row => {
-    const out = [];
-    for (const ch of row) { if (/\d/.test(ch)) for (let i=0;i<+ch;i++) out.push(null); else out.push(ch); }
-    return out;
-  });
-  return { b, turn, cr: cr === '-' ? '' : cr, ep: (ep && ep !== '-') ? parseSquare(ep) : null };
-}
-function cloneState(s) { return { b: s.b.map(r => r.slice()), turn: s.turn, cr: s.cr, ep: s.ep ? {...s.ep} : null }; }
-
-const KN = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
-const KG = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
-const DIAG = [[-1,-1],[-1,1],[1,-1],[1,1]];
-const ORTH = [[-1,0],[1,0],[0,-1],[0,1]];
-
-function attacked(b, r, c, by) {
-  // pawns
-  if (by === 'w') { if ((inb(r+1,c-1)&&b[r+1][c-1]==='P')||(inb(r+1,c+1)&&b[r+1][c+1]==='P')) return true; }
-  else { if ((inb(r-1,c-1)&&b[r-1][c-1]==='p')||(inb(r-1,c+1)&&b[r-1][c+1]==='p')) return true; }
-  // knights
-  for (const [dr,dc] of KN) { const rr=r+dr, cc=c+dc; if (inb(rr,cc)) { const p=b[rr][cc]; if (p && colorOf(p)===by && p.toLowerCase()==='n') return true; } }
-  // king
-  for (const [dr,dc] of KG) { const rr=r+dr, cc=c+dc; if (inb(rr,cc)) { const p=b[rr][cc]; if (p && colorOf(p)===by && p.toLowerCase()==='k') return true; } }
-  // sliders
-  const slide = (dirs, types) => {
-    for (const [dr,dc] of dirs) { let rr=r+dr, cc=c+dc;
-      while (inb(rr,cc)) { const p=b[rr][cc];
-        if (p) { if (colorOf(p)===by && types.includes(p.toLowerCase())) return true; break; }
-        rr+=dr; cc+=dc; } }
-    return false;
-  };
-  if (slide(DIAG, ['b','q'])) return true;
-  if (slide(ORTH, ['r','q'])) return true;
-  return false;
-}
-
-function findKing(b, color) {
-  const k = color === 'w' ? 'K' : 'k';
-  for (let r=0;r<8;r++) for (let c=0;c<8;c++) if (b[r][c]===k) return {r,c};
-  return null;
-}
-function inCheck(s) { const k = findKing(s.b, s.turn); return k ? attacked(s.b, k.r, k.c, other(s.turn)) : false; }
-
-function genPseudo(s) {
-  const { b, turn, ep } = s, moves = [];
-  const add = (fr,fc,tr,tc,opt={}) => moves.push({ from:[fr,fc], to:[tr,tc], piece:b[fr][fc], ...opt });
-  for (let r=0;r<8;r++) for (let c=0;c<8;c++) {
-    const p = b[r][c]; if (!p || colorOf(p) !== turn) continue;
-    const t = p.toLowerCase();
-    if (t === 'p') {
-      const dir = turn==='w' ? -1 : 1, start = turn==='w' ? 6 : 1, promoRow = turn==='w' ? 0 : 7;
-      const one = r+dir;
-      if (inb(one,c) && !b[one][c]) {
-        if (one===promoRow) for (const pr of ['q','r','b','n']) add(r,c,one,c,{promo:pr});
-        else { add(r,c,one,c); if (r===start && !b[r+2*dir][c]) add(r,c,r+2*dir,c,{dbl:true}); }
-      }
-      for (const dc of [-1,1]) { const cc=c+dc, rr=r+dir; if (!inb(rr,cc)) continue;
-        const tp=b[rr][cc];
-        if (tp && colorOf(tp)!==turn) { if (rr===promoRow) for (const pr of ['q','r','b','n']) add(r,c,rr,cc,{promo:pr,cap:true}); else add(r,c,rr,cc,{cap:true}); }
-        else if (ep && ep.r===rr && ep.c===cc) add(r,c,rr,cc,{ep:true,cap:true});
-      }
-    } else if (t === 'n') {
-      for (const [dr,dc] of KN) { const rr=r+dr, cc=c+dc; if (!inb(rr,cc)) continue; const tp=b[rr][cc]; if (!tp||colorOf(tp)!==turn) add(r,c,rr,cc,{cap:!!tp}); }
-    } else if (t === 'k') {
-      for (const [dr,dc] of KG) { const rr=r+dr, cc=c+dc; if (!inb(rr,cc)) continue; const tp=b[rr][cc]; if (!tp||colorOf(tp)!==turn) add(r,c,rr,cc,{cap:!!tp}); }
-      // castling
-      const rights = s.cr, row = turn==='w'?7:0, opp = other(turn);
-      const kSide = turn==='w'?'K':'k', qSide = turn==='w'?'Q':'q';
-      if (rights.includes(kSide) && !b[row][5] && !b[row][6] &&
-          !attacked(b,row,4,opp) && !attacked(b,row,5,opp) && !attacked(b,row,6,opp))
-        add(r,c,row,6,{castle:'K'});
-      if (rights.includes(qSide) && !b[row][1] && !b[row][2] && !b[row][3] &&
-          !attacked(b,row,4,opp) && !attacked(b,row,3,opp) && !attacked(b,row,2,opp))
-        add(r,c,row,2,{castle:'Q'});
-    } else {
-      const dirs = t==='b'?DIAG : t==='r'?ORTH : DIAG.concat(ORTH);
-      for (const [dr,dc] of dirs) { let rr=r+dr, cc=c+dc;
-        while (inb(rr,cc)) { const tp=b[rr][cc]; if (!tp) { add(r,c,rr,cc); } else { if (colorOf(tp)!==turn) add(r,c,rr,cc,{cap:true}); break; } rr+=dr; cc+=dc; } }
-    }
-  }
-  return moves;
-}
-
-function makeMove(s, m) {
-  const n = cloneState(s);
-  const [fr,fc]=m.from, [tr,tc]=m.to, p=n.b[fr][fc], color=colorOf(p);
-  n.b[fr][fc]=null;
-  if (m.ep) n.b[fr][tc]=null;                              // en-passant captured pawn
-  let placed = p;
-  if (m.promo) placed = color==='w' ? m.promo.toUpperCase() : m.promo;
-  n.b[tr][tc]=placed;
-  if (m.castle) { const row=fr; if (m.castle==='K'){ n.b[row][5]=n.b[row][7]; n.b[row][7]=null; } else { n.b[row][3]=n.b[row][0]; n.b[row][0]=null; } }
-  // castling rights
-  let cr = n.cr;
-  if (p==='K') cr = cr.replace('K','').replace('Q','');
-  if (p==='k') cr = cr.replace('k','').replace('q','');
-  const strip = (r,c) => { if (r===7&&c===0) cr=cr.replace('Q',''); else if (r===7&&c===7) cr=cr.replace('K','');
-    else if (r===0&&c===0) cr=cr.replace('q',''); else if (r===0&&c===7) cr=cr.replace('k',''); };
-  if (p.toLowerCase()==='r') strip(fr,fc);
-  strip(tr,tc); // rook captured on home square
-  n.cr = cr;
-  n.ep = m.dbl ? { r:(fr+tr)/2, c:fc } : null;
-  n.turn = other(color);
-  return n;
-}
-
-function legalMoves(s) {
-  const out = [];
-  for (const m of genPseudo(s)) { const n = makeMove(s,m); const k=findKing(n.b,s.turn); if (k && !attacked(n.b,k.r,k.c,n.turn)) out.push(m); }
-  return out;
-}
-
-function toSAN(s, m, legal) {
-  if (m.castle) { let san = m.castle==='K' ? 'O-O' : 'O-O-O'; return san + checkSuffix(s,m); }
-  const t = m.piece.toLowerCase(), dest = sqName(m.to[0], m.to[1]);
-  let san;
-  if (t === 'p') {
-    san = m.cap ? FILES[m.from[1]] + 'x' + dest : dest;
-    if (m.promo) san += '=' + m.promo.toUpperCase();
-  } else {
-    let dis = '';
-    const peers = legal.filter(x => x.piece===m.piece && x.to[0]===m.to[0] && x.to[1]===m.to[1] && !(x.from[0]===m.from[0]&&x.from[1]===m.from[1]));
-    if (peers.length) {
-      const sameFile = peers.some(x => x.from[1]===m.from[1]);
-      const sameRank = peers.some(x => x.from[0]===m.from[0]);
-      dis = !sameFile ? FILES[m.from[1]] : !sameRank ? String(8-m.from[0]) : sqName(m.from[0],m.from[1]);
-    }
-    san = m.piece.toUpperCase() + dis + (m.cap ? 'x' : '') + dest;
-  }
-  return san + checkSuffix(s,m);
-}
-function checkSuffix(s, m) { const n = makeMove(s,m); if (!inCheck(n)) return ''; return legalMoves(n).length ? '+' : '#'; }
-
-function perft(s, depth) { if (depth===0) return 1; let n=0; for (const m of legalMoves(s)) n += perft(makeMove(s,m), depth-1); return n; }
-
-if (typeof module !== 'undefined') module.exports = { parseFEN, legalMoves, makeMove, perft, toSAN, inCheck, findKing, sqName };
-//=== ENGINE END ===
-
-// --------------------------------------------------------------------------
-// UI
-// --------------------------------------------------------------------------
-const GLYPH = { p:'♟', n:'♞', b:'♝', r:'♜', q:'♛', k:'♚' };
-const VAL = { p:1, n:3, b:3, r:5, q:9, k:0 };
-const START_COUNT = { p:8, n:2, b:2, r:2, q:1, k:1 };
-
-let server = null;        // last server payload
-let pos = null;           // parsed engine state from server FEN
-let legal = [];           // legal moves for side to move
-let sel = null;           // selected [r,c]
-let flipped = false;
-let prevFen = null;
-let endPosted = null;     // fen for which we've posted a game-over status
-let pendingPromo = null;  // {from,to} awaiting promotion choice
-
-const $ = (id) => document.getElementById(id);
-
-function order() { const a=[...Array(8).keys()]; return flipped ? a.slice().reverse() : a; }
-
-function render() {
-  if (!server) return;
-  pos = parseFEN(server.fen);
-  legal = server.status === 'playing' ? legalMoves(pos) : [];
-  const board = $('board'); board.innerHTML = '';
-  const myTurn = pos.turn === 'w' && server.status === 'playing';
-  const kingSq = inCheck(pos) ? findKing(pos.b, pos.turn) : null;
-  const last = server.last_move;
-  const od = order();
-
-  for (const r of od) for (const c of od) {
-    const d = document.createElement('div');
-    d.className = 'sq ' + ((r+c)%2 ? 'dark' : 'light');
-    d.dataset.sq = sqName(r,c);
-    if (last && last.from === sqName(r,c)) d.classList.add('last');
-    if (last && last.to === sqName(r,c)) d.classList.add('last');
-    if (sel && sel[0]===r && sel[1]===c) d.classList.add('sel');
-    if (kingSq && kingSq.r===r && kingSq.c===c) d.classList.add('check');
-
-    // edge coordinate labels
-    if (c === od[0]) { const l=document.createElement('span'); l.className='lbl rank'; l.textContent=8-r; d.appendChild(l); }
-    if (r === od[7]) { const l=document.createElement('span'); l.className='lbl file'; l.textContent=FILES[c]; d.appendChild(l); }
-
-    const p = pos.b[r][c];
-    if (p) {
-      const span = document.createElement('span');
-      span.className = 'piece ' + (colorOf(p)==='w' ? 'piece-w' : 'piece-b');
-      span.textContent = GLYPH[p.toLowerCase()];
-      d.appendChild(span);
-      if (myTurn && colorOf(p)==='w') d.classList.add('playable');
-    }
-
-    // legal-move hint when a piece is selected
-    if (sel) {
-      const mv = legalForSel().find(m => m.to[0]===r && m.to[1]===c);
-      if (mv) {
-        const h = document.createElement('div');
-        h.className = 'hint' + (p || mv.ep ? ' capture' : '');
-        const dot = document.createElement('div'); dot.className='dot'; h.appendChild(dot);
-        d.appendChild(h);
-        d.classList.add('playable');
-      }
-    }
-    d.onclick = () => onSquare(r,c);
-    board.appendChild(d);
-  }
-
-  animateLast();
-  prevFen = server.fen;
-  paintStatus(); paintTrays(); paintLog();
-  detectEnd();
-}
-
-function legalForSel() { return sel ? legal.filter(m => m.from[0]===sel[0] && m.from[1]===sel[1]) : []; }
-
-function onSquare(r,c) {
-  if (!pos || pos.turn !== 'w' || server.status !== 'playing') return;
-  const p = pos.b[r][c];
-  if (sel) {
-    const mv = legalForSel().find(m => m.to[0]===r && m.to[1]===c);
-    if (mv) {
-      const promos = legalForSel().filter(m => m.to[0]===r && m.to[1]===c && m.promo);
-      if (promos.length) { pendingPromo = { from: sel, to: [r,c] }; openPromo(); return; }
-      sel = null; submitMove(mv); return;
-    }
-  }
-  if (p && colorOf(p)==='w') { sel = (sel && sel[0]===r && sel[1]===c) ? null : [r,c]; render(); }
-  else { sel = null; render(); }
-}
-
-function buildMove(from, to, promo) {
-  return legal.find(m => m.from[0]===from[0]&&m.from[1]===from[1]&&m.to[0]===to[0]&&m.to[1]===to[1]&&(promo ? m.promo===promo : !m.promo));
-}
-
-async function submitMove(mv) {
-  const san = toSAN(pos, mv, legal);
-  const body = { from: sqName(mv.from[0],mv.from[1]), to: sqName(mv.to[0],mv.to[1]), san, by:'human' };
-  if (mv.promo) body.promotion = mv.promo;
-  try {
-    const r = await fetch('/api/move', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    const next = await r.json();
-    if (next.error) { await poll(); return; }
-    server = next; render();
-  } catch(e) { await poll(); }
-}
-
-// promotion -------------------------------------------------------------
-function openPromo() {
-  const box = $('promoOpts'); box.innerHTML='';
-  for (const pr of ['q','r','b','n']) {
-    const b = document.createElement('div'); b.className='opt'; b.textContent = GLYPH[pr];
-    b.onclick = () => { const mv = buildMove(pendingPromo.from, pendingPromo.to, pr); $('veil').classList.remove('show'); sel=null; pendingPromo=null; if (mv) submitMove(mv); };
-    box.appendChild(b);
-  }
-  $('veil').classList.add('show');
-}
-
-// status / trays / log --------------------------------------------------
-function paintStatus() {
-  const el = $('status'), txt = $('statusText');
-  const checked = inCheck(pos);
-  let cls = 'status', label = '';
-  if (server.status && server.status !== 'playing') {
-    cls += /win/i.test(server.status) ? ' win' : ' over';
-    label = `<b>${esc(server.status)}</b>`;
-  } else if (pos.turn === 'w') {
-    cls += checked ? ' check' : ' you';
-    label = checked ? '<b>Check — defend your king</b>' : '<b>Your move</b><small>white to play</small>';
-  } else {
-    cls += checked ? ' check' : ' ai';
-    label = checked ? '<b>You have Claude in check</b><small>obsidian to respond</small>' : '<b>Claude is thinking…</b><small>obsidian to play</small>';
-  }
-  el.className = cls; txt.innerHTML = label;
-}
-
-function counts(color) {
-  const out = { p:0,n:0,b:0,r:0,q:0,k:0 };
-  for (const row of pos.b) for (const p of row) if (p && colorOf(p)===color) out[p.toLowerCase()]++;
-  return out;
-}
-function paintTrays() {
-  const w = counts('w'), b = counts('b');
-  const missing = (cnt) => { const m=[]; for (const t of ['q','r','b','n','p']) for (let i=0;i<START_COUNT[t]-cnt[t];i++) m.push(t); return m; };
-  const capByYou = missing(b), capByAi = missing(w);     // black pieces you took / white pieces claude took
-  $('capByYou').innerHTML = capByYou.map(t=>`<span class="pb">${GLYPH[t]}</span>`).join('');
-  $('capByAi').innerHTML  = capByAi.map(t=>`<span class="pw">${GLYPH[t]}</span>`).join('');
-  const matW = Object.entries(w).reduce((a,[t,n])=>a+VAL[t]*n,0);
-  const matB = Object.entries(b).reduce((a,[t,n])=>a+VAL[t]*n,0);
-  const diff = matW - matB;
-  $('advYou').textContent = diff > 0 ? '+' + diff : '';
-  $('advAi').textContent  = diff < 0 ? '+' + (-diff) : '';
-}
-
-function paintLog() {
-  const log = $('log'); const h = server.history || [];
-  if (!h.length) { log.innerHTML = '<div class="empty-state">The first move is yours. Click a piece to begin.</div>'; return; }
-  let html = '', i = 0;
-  while (i < h.length) {
-    const wm = h[i].color==='w' ? h[i] : null;
-    const bm = wm ? (h[i+1] && h[i+1].color==='b' ? h[i+1] : null) : h[i];
-    const no = wm ? wm.number : bm.number;
-    html += `<div class="ply"><span class="no">${no}.</span>` +
-      `<span class="mv${wm?'':' empty'}">${wm ? esc(wm.san||cell(wm)) : '·'}</span>` +
-      `<span class="mv${bm?'':' empty'}">${bm ? esc(bm.san||cell(bm)) : ''}</span>`;
-    const note = (bm && bm.by==='ai' && bm.comment) ? bm : (wm && wm.by==='ai' && wm.comment) ? wm : null;
-    if (note) html += `<span class="note">“${esc(note.comment)}”${note.reasoning?`<span class="why">${esc(note.reasoning)}</span>`:''}</span>`;
-    html += `</div>`;
-    i += wm && bm ? 2 : 1;
-  }
-  log.innerHTML = html; log.scrollTop = log.scrollHeight;
-}
-const cell = (m) => (m.from||'') + (m.to||'');
-const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-
-// game-over detection (the client is the rules authority) --------------
-function detectEnd() {
-  if (server.status !== 'playing' || endPosted === server.fen) return;
-  if (legal.length === 0) {
-    const checked = inCheck(pos);
-    let status;
-    if (checked) status = pos.turn === 'w' ? 'Checkmate — Claude wins' : 'Checkmate — you win';
-    else status = 'Stalemate — draw';
-    endPosted = server.fen; postStatus(status);
-  } else if (parseInt(server.fen.split(' ')[4]||'0',10) >= 100) {
-    endPosted = server.fen; postStatus('Draw — fifty-move rule');
-  }
-}
-async function postStatus(status) {
-  try { const r = await fetch('/api/status', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({status}) }); server = await r.json(); paintStatus(); } catch(e){}
-}
-
-// move animation -------------------------------------------------------
-function squareXY(r,c) { const cs = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell'));
-  const od = order(); const col = od.indexOf(c), row = od.indexOf(r); return { x: col*cs, y: row*cs }; }
-function animateLast() {
-  const last = server.last_move; if (!last || !prevFen || prevFen === server.fen) return;
-  const toEl = document.querySelector(`.sq[data-sq="${last.to}"] .piece`); if (!toEl) return;
-  const f = parseSquare(last.from), t = parseSquare(last.to);
-  const a = squareXY(f.r,f.c), b = squareXY(t.r,t.c);
-  toEl.classList.add('moving');
-  toEl.style.transform = `translate(${a.x-b.x}px, ${a.y-b.y}px)`;
-  requestAnimationFrame(() => requestAnimationFrame(() => { toEl.style.transform = 'translate(0,0)'; }));
-  setTimeout(() => { toEl.classList.remove('moving'); toEl.style.transform=''; }, 300);
-}
-
-// controls -------------------------------------------------------------
-async function newGame() { sel=null; endPosted=null; await fetch('/api/reset',{method:'POST'}); await poll(); }
-function flip() { flipped = !flipped; render(); }
-async function resign() { if (server.status==='playing') { endPosted='resign'; await postStatus('You resigned — Claude wins'); } }
-
-// poll loop ------------------------------------------------------------
-async function poll() {
-  try { const r = await fetch('/api/state'); const next = await r.json();
-    if (!server || next.move_count >= (server.move_count||0)) { server = next; render(); }
-  } catch(e) { $('statusText').innerHTML = '<b>server offline</b>'; $('status').className='status over'; }
-}
-poll(); setInterval(poll, 1500);
-</script>
+  <!-- app.js is the entry point; it pulls in engine.js, api.js and view.js -->
+  <script type="module" src="/web/app.js"></script>
 </body>
 </html>

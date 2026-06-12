@@ -13,6 +13,22 @@ const TOOL_SERVER: &str = include_str!("../assets/skill/tools/server.cjs");
 const TOOL_BOARD: &str = include_str!("../assets/skill/tools/board.html");
 const TOOL_API: &str = include_str!("../assets/skill/tools/chess-api.cjs");
 
+// The AI-opponent agent. Installed into ~/.claude/agents (NOT the skill dir) so
+// the Agent tool can resolve `subagent_type: "chess-ai"`. Restricting it to
+// `tools: [Bash]` is what keeps the per-call tool-schema tax minimal.
+const AGENT_AI: &str = include_str!("../assets/skill/agents/chess-ai.md");
+
+// Web board assets (split out of board.html): served from tools/web by server.cjs.
+// (path-in-skill, contents) — laid down under <skill>/tools/web/.
+const WEB_ASSETS: &[(&str, &str)] = &[
+    ("theme.css", include_str!("../assets/skill/tools/web/theme.css")),
+    ("board.css", include_str!("../assets/skill/tools/web/board.css")),
+    ("engine.js", include_str!("../assets/skill/tools/web/engine.js")),
+    ("api.js", include_str!("../assets/skill/tools/web/api.js")),
+    ("view.js", include_str!("../assets/skill/tools/web/view.js")),
+    ("app.js", include_str!("../assets/skill/tools/web/app.js")),
+];
+
 fn home_dir() -> Option<PathBuf> {
     for var in ["HOME", "USERPROFILE"] {
         if let Ok(h) = std::env::var(var) {
@@ -45,6 +61,16 @@ pub fn run() -> std::io::Result<()> {
     write_file(&chess.join("tools").join("server.cjs"), TOOL_SERVER)?;
     write_file(&chess.join("tools").join("board.html"), TOOL_BOARD)?;
     write_file(&chess.join("tools").join("chess-api.cjs"), TOOL_API)?;
+    for (name, contents) in WEB_ASSETS {
+        write_file(&chess.join("tools").join("web").join(name), contents)?;
+    }
+
+    // The AI-opponent agent lives under ~/.claude/agents so the Agent tool can
+    // find it by subagent_type, independent of the skill directory.
+    let agents = home.join(".claude").join("agents");
+    write_file(&agents.join("chess-ai.md"), AGENT_AI)?;
+    // Clean up the pre-rename agent file, if present.
+    let _ = fs::remove_file(agents.join("chess-player.md"));
 
     // Remove the legacy v0.1.x workflow, if a previous install left one behind.
     let legacy = home.join(".claude").join("workflows").join("chessai.cjs");

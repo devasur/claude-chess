@@ -4,12 +4,12 @@
  *
  * Holds authoritative game state, applies moves (FEN, castling, en-passant,
  * promotion), serves the clickable web board, and exposes a small REST API used
- * by both the browser and the Claude black-player agent.
+ * by both the browser and the AI-opponent agent.
  *
  *   node server.cjs [--port 4577] [--open]
  *
  * It deliberately does NOT enforce full legality — move *selection* is delegated
- * to Claude. There is no model intelligence here; this process is dumb plumbing.
+ * to the AI opponent. There is no model intelligence here; this process is dumb plumbing.
  */
 const http = require('http')
 const fs = require('fs')
@@ -128,31 +128,127 @@ function applyMove(b, from, to, promotion) {
 }
 
 // ---------------------------------------------------------------------------
-// Game state
+// Persistence — one JSON file per game under the data dir, loaded on boot and
+// rewritten on every mutation. Dependency-free; the files are small and local.
+// Override the location with CHESSAI_DATA_DIR.
 // ---------------------------------------------------------------------------
-let game = { board: newBoard(), history: [], status: 'playing' }
-const reset = () => { game = { board: newBoard(), history: [], status: 'playing' } }
+const DATA_DIR = process.env.CHESSAI_DATA_DIR || path.join(os.homedir(), '.chessai', 'games')
+try { fs.mkdirSync(DATA_DIR, { recursive: true }) } catch {}
 
-function fullState() {
+// Human-friendly, unique game ids: three random words, e.g. "amber-brave-falcon".
+// The id IS the name and the filename, so the alphabet is deliberately a-z only.
+const ADJ = ['amber', 'brave', 'calm', 'dapper', 'eager', 'fabled', 'gilded', 'hidden', 'ivory', 'jolly', 'keen', 'lucid', 'mellow', 'noble', 'opal', 'proud', 'quiet', 'ruby', 'silver', 'tidal', 'umber', 'velvet', 'wily', 'zephyr']
+const TONE = ['ash', 'birch', 'cobalt', 'dusk', 'ember', 'frost', 'glow', 'haze', 'indigo', 'jade', 'kelp', 'lunar', 'moss', 'night', 'ochre', 'pearl', 'quartz', 'rust', 'slate', 'teal']
+const NOUN = ['falcon', 'gambit', 'harbor', 'isle', 'jaguar', 'kestrel', 'lattice', 'meadow', 'nimbus', 'otter', 'pawn', 'quill', 'raven', 'sparrow', 'thicket', 'umbra', 'vesper', 'willow', 'yarrow', 'zenith', 'anvil', 'beacon', 'cipher', 'delta', 'echo', 'fjord', 'grove', 'hollow']
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
+function newName(taken) {
+  for (let i = 0; i < 500; i++) {
+    const name = `${pick(ADJ)}-${pick(TONE)}-${pick(NOUN)}`
+    if (!taken.has(name)) return name
+  }
+  let n = 2, base = `${pick(ADJ)}-${pick(NOUN)}`            // pathological fallback
+  while (taken.has(`${base}-${n}`)) n++
+  return `${base}-${n}`
+}
+const VALID_ID = /^[a-z]+(?:-[a-z0-9]+)+$/                   // also guards against path traversal
+
+// Board skins the client can render; the choice is stored per game so a recalled
+// board opens in the theme it was last played in.
+const THEMES = new Set(['midnight', 'ivory', 'emerald'])
+const DEFAULT_THEME = 'midnight'
+
+// ---------------------------------------------------------------------------
+// Game state — a map of id -> game, persisted to disk.
+// ---------------------------------------------------------------------------
+const games = new Map()
+const gamePath = (id) => path.join(DATA_DIR, `${id}.json`)
+
+function persist(game) {
+  try { fs.writeFileSync(gamePath(game.id), JSON.stringify(game)) }
+  catch (e) { console.error(`persist ${game.id} failed: ${e.message}`) }
+}
+function touch(game) { game.updated = Date.now(); persist(game); return game }
+
+function loadAll() {
+  let files = []
+  try { files = fs.readdirSync(DATA_DIR).filter((f) => f.endsWith('.json')) } catch { return }
+  for (const f of files) {
+    try {
+      const g = JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), 'utf8'))
+      if (g && g.id && g.board) {
+        if (!THEMES.has(g.theme)) g.theme = DEFAULT_THEME        // migrate pre-theme saves
+        if (g.opponent === undefined) g.opponent = null
+        games.set(g.id, g)
+      }
+    } catch (e) { console.error(`skip ${f}: ${e.message}`) }
+  }
+}
+loadAll()
+
+function createGame() {
+  const id = newName(new Set(games.keys()))
+  const now = Date.now()
+  const game = { id, name: id, board: newBoard(), history: [], status: 'playing', theme: DEFAULT_THEME, opponent: null, created: now, updated: now }
+  games.set(id, game)
+  persist(game)
+  return game
+}
+function resetGame(game) {
+  game.board = newBoard(); game.history = []; game.status = 'playing'
+  return touch(game)
+}
+
+// Combine a new identity payload over the existing one, keeping known fields.
+function mergeOpponent(prev, body) {
+  const p = prev || {}
   return {
-    fen: toFen(game.board),
-    turn: game.board.side,
-    status: game.status,
+    name: body.opponent || body.name || p.name || null,
+    harness: body.harness || p.harness || null,
+    model: body.model || p.model || null,
+  }
+}
+
+// Every live game where it is `side`'s turn, oldest activity first. This is what
+// lets ONE stateless agent serve every parallel game: it asks "what needs me?"
+// and never tracks games itself. The batching agent fetches the whole list at
+// once; the single-board form just returns the head.
+function pendingAllFor(side) {
+  return [...games.values()]
+    .filter((g) => g.status === 'playing' && g.board.side === side)
+    .sort((a, b) => a.updated - b.updated)
+}
+function pendingFor(side) { return pendingAllFor(side)[0] || null }
+
+// ---- response shapes ----
+function fullState(game) {
+  return {
+    id: game.id, name: game.name,
+    fen: toFen(game.board), turn: game.board.side, status: game.status,
+    theme: game.theme, opponent: game.opponent || null,
     move_count: game.history.length,
     last_move: game.history[game.history.length - 1] || null,
     history: game.history,
+    created: game.created, updated: game.updated,
   }
 }
-function turnState() {
+function turnState(game) {
   const last = game.history[game.history.length - 1] || {}
   return {
-    fen: toFen(game.board),
-    turn: game.board.side,
-    status: game.status,
+    id: game.id, name: game.name,
+    fen: toFen(game.board), turn: game.board.side, status: game.status,
     move_count: game.history.length,
-    last_san: last.san || '',
-    last_from: last.from || '',
-    last_to: last.to || '',
+    last_san: last.san || '', last_from: last.from || '', last_to: last.to || '',
+  }
+}
+function indexEntry(game) {
+  const last = game.history[game.history.length - 1] || {}
+  return {
+    id: game.id, name: game.name,
+    fen: toFen(game.board), turn: game.board.side, status: game.status,
+    theme: game.theme, opponent: game.opponent || null,
+    move_count: game.history.length,
+    last_san: last.san || '', last_comment: last.comment || null, last_by: last.by || null,
+    created: game.created, updated: game.updated,
   }
 }
 
@@ -163,6 +259,30 @@ const BOARD_HTML = (() => {
   try { return fs.readFileSync(path.join(__dirname, 'board.html'), 'utf8') }
   catch { return '<h1>board.html missing</h1>' }
 })()
+
+// Static assets for the web board (CSS + ES modules) live in ./web. Served
+// fresh from disk per request (no caching) so edits show up on reload.
+const WEB_DIR = path.join(__dirname, 'web')
+const MIME = {
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.html': 'text/html; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+}
+function serveWeb(res, urlPath) {
+  const rel = decodeURIComponent(urlPath.replace(/^\/web\//, ''))
+  const full = path.join(WEB_DIR, rel)
+  if (full !== WEB_DIR && !full.startsWith(WEB_DIR + path.sep)) { // path-traversal guard
+    return sendJson(res, 403, { error: 'forbidden' })
+  }
+  fs.readFile(full, (err, data) => {
+    if (err) return sendJson(res, 404, { error: 'not found' })
+    const type = MIME[path.extname(full).toLowerCase()] || 'application/octet-stream'
+    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-cache' })
+    res.end(data)
+  })
+}
 
 function sendJson(res, code, obj) {
   const body = JSON.stringify(obj)
@@ -178,45 +298,107 @@ function readBody(req) {
 }
 
 const server = http.createServer(async (req, res) => {
-  const url = (req.url || '/').split('?')[0]
+  const [rawPath, query] = (req.url || '/').split('?')
+  const url = rawPath
   const m = req.method
+  const parts = url.split('/').filter(Boolean)            // e.g. ['api','games','amber-..','move']
 
+  // ---- shell + static assets ----
   if (m === 'GET' && (url === '/' || url === '/index.html')) {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
     return res.end(BOARD_HTML)
   }
-  if (m === 'GET' && url === '/api/health') return sendJson(res, 200, { ok: true, version: '0.2.1' })
-  if (m === 'GET' && url === '/api/state') return sendJson(res, 200, fullState())
-  if (m === 'GET' && url === '/api/turn') return sendJson(res, 200, turnState())
-  if (m === 'POST' && url === '/api/reset') { reset(); return sendJson(res, 200, fullState()) }
+  if (m === 'GET' && url.startsWith('/web/')) return serveWeb(res, url)
+  if (m === 'GET' && url === '/api/health') return sendJson(res, 200, { ok: true, version: '0.4.0', games: games.size })
 
-  if (m === 'POST' && url === '/api/status') {
-    const body = await readBody(req)
-    if (body && typeof body.status === 'string') game.status = body.status
-    return sendJson(res, 200, fullState())
+  // ---- agent: position(s) that need a move (default black) ----
+  // ?all=1 returns EVERY pending board as an array (the batching agent fetches
+  // the whole set in one shot); otherwise just the next one.
+  if (m === 'GET' && url === '/api/pending') {
+    const side = /(^|&)side=w(&|$)/.test(query || '') ? 'w' : 'b'
+    if (/(^|&)all=1(&|$)/.test(query || '')) return sendJson(res, 200, pendingAllFor(side).map(turnState))
+    const g = pendingFor(side)
+    return sendJson(res, 200, g ? turnState(g) : { id: null })
   }
 
-  if (m === 'POST' && url === '/api/move') {
-    const body = await readBody(req)
-    if (!body || !body.from || !body.to) return sendJson(res, 400, { error: 'need from + to' })
-    const color = game.board.side
-    const number = game.board.full
-    try {
-      applyMove(game.board, body.from, body.to, body.promotion)
-    } catch (e) {
-      return sendJson(res, 400, { error: e.message })
+  // ---- games collection ----
+  if (m === 'GET' && url === '/api/games') {
+    const list = [...games.values()].sort((a, b) => b.updated - a.updated).map(indexEntry)
+    return sendJson(res, 200, list)
+  }
+  if (m === 'POST' && url === '/api/games') return sendJson(res, 200, fullState(createGame()))
+
+  // ---- a single game: /api/games/:id[/action] ----
+  if (parts[0] === 'api' && parts[1] === 'games' && parts[2]) {
+    const id = parts[2], action = parts[3] || ''
+    if (!VALID_ID.test(id)) return sendJson(res, 400, { error: 'bad game id' })
+    const game = games.get(id)
+    if (!game) return sendJson(res, 404, { error: 'no such game' })
+
+    if (m === 'GET' && !action) return sendJson(res, 200, fullState(game))
+    if (m === 'GET' && action === 'turn') return sendJson(res, 200, turnState(game))
+    if (m === 'POST' && action === 'reset') return sendJson(res, 200, fullState(resetGame(game)))
+
+    if (m === 'DELETE' && !action) {
+      games.delete(id)
+      try { fs.unlinkSync(gamePath(id)) } catch {}
+      return sendJson(res, 200, { ok: true, id })
     }
-    game.history.push({
-      number, color,
-      from: body.from, to: body.to,
-      san: body.san || null,
-      promotion: body.promotion || null,
-      comment: body.comment || null,
-      reasoning: body.reasoning || null,
-      by: body.by || 'human',
-      fen: toFen(game.board),
-    })
-    return sendJson(res, 200, fullState())
+
+    if (m === 'POST' && action === 'status') {
+      const body = await readBody(req)
+      if (body && typeof body.status === 'string') { game.status = body.status; touch(game) }
+      return sendJson(res, 200, fullState(game))
+    }
+
+    if (m === 'POST' && action === 'theme') {
+      const body = await readBody(req)
+      if (!body || !THEMES.has(body.theme)) return sendJson(res, 400, { error: 'unknown theme' })
+      game.theme = body.theme; touch(game)
+      return sendJson(res, 200, fullState(game))
+    }
+
+    // Record who the opponent is (the black agent's harness/model). Lets the
+    // board show "who am I playing?" instead of a generic label.
+    if (m === 'POST' && action === 'opponent') {
+      const body = await readBody(req) || {}
+      game.opponent = mergeOpponent(game.opponent, body); touch(game)
+      return sendJson(res, 200, fullState(game))
+    }
+
+    if (m === 'POST' && action === 'move') {
+      const body = await readBody(req)
+      if (!body || !body.from || !body.to) return sendJson(res, 400, { error: 'need from + to' })
+      // Compare-and-swap guard: reject a move computed against a stale position
+      // (the agent passes the move_count it reasoned from). Keeps a multiplexed
+      // agent from double-moving without it tracking any per-game state.
+      if (body.expected_ply != null && body.expected_ply !== game.history.length) {
+        return sendJson(res, 409, { error: 'stale move', move_count: game.history.length })
+      }
+      const color = game.board.side
+      const number = game.board.full
+      try {
+        applyMove(game.board, body.from, body.to, body.promotion)
+      } catch (e) {
+        return sendJson(res, 400, { error: e.message })
+      }
+      game.history.push({
+        number, color,
+        from: body.from, to: body.to,
+        san: body.san || null,
+        promotion: body.promotion || null,
+        comment: body.comment || null,
+        reasoning: body.reasoning || null,
+        by: body.by || 'human',
+        fen: toFen(game.board),
+      })
+      // an AI move may carry the opponent's identity — record it as we see it.
+      if ((body.by || 'human') === 'ai' && (body.model || body.harness || body.opponent)) {
+        game.opponent = mergeOpponent(game.opponent, body)
+      }
+      touch(game)
+      return sendJson(res, 200, fullState(game))
+    }
   }
 
   sendJson(res, 404, { error: 'not found' })
@@ -314,6 +496,7 @@ server.listen(PORT, '127.0.0.1', () => {
   const base = `http://127.0.0.1:${PORT}`
   console.log(`chessai server listening on ${base}`)
   console.log(`  web board : ${base}/`)
-  console.log(`  api turn  : ${base}/api/turn`)
+  console.log(`  pending   : ${base}/api/pending  (next position needing black)`)
+  console.log(`  games dir : ${DATA_DIR}  (${games.size} saved)`)
   if (OPEN) openBrowser(base + '/')
 })

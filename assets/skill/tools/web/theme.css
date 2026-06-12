@@ -1,0 +1,116 @@
+/* theme.css — board skins.
+ *
+ * Three complete palettes, selected by <html data-theme="…">. board.css reads
+ * ONLY these tokens — it hard-codes no colour or surface — so a skin is a pure
+ * data change. The chosen skin is persisted per game by the server and reapplied
+ * on recall.
+ *
+ *   midnight — the default: warm brass on near-black, film-noir study
+ *   ivory    — light parchment + walnut, a daylit reading room
+ *   emerald  — deep club green + gold, classic tournament felt
+ *
+ * Every theme defines the SAME token set (palette + surfaces) so adding a fourth
+ * is just one more block below.
+ */
+
+/* ===== midnight (default) ============================================== */
+:root,
+:root[data-theme="midnight"] {
+  /* palette */
+  --bg:        #100d0b;
+  --bg-2:      #1a1512;
+  --ink:       #ece2d0;
+  --ink-soft:  #a99d88;
+  --ink-faint: #6f6557;
+  --ink-strong:#ffffff;
+  --brass:     #cda24e;       /* accent */
+  --brass-dim: #8c6f37;
+  --sq-light:  #d8c4a0;
+  --sq-dark:   #5a4031;
+  --sel:       #d9b25a;
+  --last:      #b98f3e;
+  --check:     #d8523a;
+  --win:       #cda24e;
+  --good:      #86c08a;       /* "your move" pulse */
+  --piece-w:   #f6edd6;
+  --piece-b:   #14100d;
+  --panel:     rgba(28, 22, 18, .72);
+  --hair:      rgba(205, 162, 78, .22);
+  --shadow:    0 28px 70px -28px rgba(0, 0, 0, .85);
+  /* surfaces */
+  --body-bg:   radial-gradient(120% 90% at 28% 14%, #2a201a 0%, #160f0c 46%, #0b0807 100%), #100d0b;
+  --vignette:  radial-gradient(120% 100% at 50% 38%, transparent 52%, rgba(0,0,0,.55) 100%);
+  --grain:     .05;
+  --frame-bg:  linear-gradient(150deg, #241a13, #140d09 60%);
+  --panel-grad:linear-gradient(160deg, #241a13, #150e0a);
+  --btn-bg:    linear-gradient(180deg, #2a221b, #1d1611);
+  --brand-grad:linear-gradient(180deg, #f3e6c8, #c79a44);
+  --lbl-light: #6a4a32;
+  --lbl-dark:  #d6c2a0;
+}
+
+/* ===== ivory (light) =================================================== */
+:root[data-theme="ivory"] {
+  --bg:        #e7ddc9;
+  --bg-2:      #f2ead9;
+  --ink:       #2c2419;
+  --ink-soft:  #6c5d47;
+  --ink-faint: #9a8b72;
+  --ink-strong:#1c1610;
+  --brass:     #a06c2c;
+  --brass-dim: #c2a36b;
+  --sq-light:  #ecdfc2;
+  --sq-dark:   #ac8351;
+  --sel:       #c6952f;
+  --last:      #caa552;
+  --check:     #c3402c;
+  --win:       #a06c2c;
+  --good:      #3f8f5a;
+  --piece-w:   #fcf8ee;
+  --piece-b:   #2a2019;
+  --panel:     rgba(255, 251, 242, .80);
+  --hair:      rgba(120, 85, 35, .26);
+  --shadow:    0 24px 60px -28px rgba(70, 48, 20, .42);
+  --body-bg:   radial-gradient(120% 90% at 28% 14%, #fbf6ea 0%, #ece1cc 50%, #dccdb0 100%), #e7ddc9;
+  --vignette:  radial-gradient(120% 100% at 50% 38%, transparent 60%, rgba(80,60,30,.16) 100%);
+  --grain:     .035;
+  --frame-bg:  linear-gradient(150deg, #c9ad7f, #a37f4e 60%);
+  --panel-grad:linear-gradient(160deg, #fbf6ea, #efe5d1);
+  --btn-bg:    linear-gradient(180deg, #f4ecdb, #e6dac1);
+  --brand-grad:linear-gradient(180deg, #8a5e29, #c08f3f);
+  --lbl-light: #8a6a45;
+  --lbl-dark:  #f6ecd4;
+}
+
+/* ===== emerald (dark green) ============================================ */
+:root[data-theme="emerald"] {
+  --bg:        #0b1310;
+  --bg-2:      #11201a;
+  --ink:       #e7efe6;
+  --ink-soft:  #9db2a3;
+  --ink-faint: #647a6c;
+  --ink-strong:#ffffff;
+  --brass:     #d2b45a;
+  --brass-dim: #8a7330;
+  --sq-light:  #d9c9a3;
+  --sq-dark:   #3f6b4f;
+  --sel:       #d8c05a;
+  --last:      #b9963e;
+  --check:     #e0533a;
+  --win:       #d2b45a;
+  --good:      #7fc08a;
+  --piece-w:   #f6f1df;
+  --piece-b:   #11140f;
+  --panel:     rgba(14, 28, 22, .74);
+  --hair:      rgba(210, 180, 90, .20);
+  --shadow:    0 28px 70px -28px rgba(0, 0, 0, .85);
+  --body-bg:   radial-gradient(120% 90% at 28% 14%, #15281f 0%, #0d1a14 46%, #07100c 100%), #0b1310;
+  --vignette:  radial-gradient(120% 100% at 50% 38%, transparent 52%, rgba(0,0,0,.5) 100%);
+  --grain:     .05;
+  --frame-bg:  linear-gradient(150deg, #14241b, #0a130e 60%);
+  --panel-grad:linear-gradient(160deg, #14241b, #0a130e);
+  --btn-bg:    linear-gradient(180deg, #18291f, #0f1c15);
+  --brand-grad:linear-gradient(180deg, #f0e7c8, #c9a544);
+  --lbl-light: #4d6b4f;
+  --lbl-dark:  #d9c9a3;
+}
