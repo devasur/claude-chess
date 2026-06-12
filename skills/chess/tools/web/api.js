@@ -15,6 +15,9 @@ const post = (url, body) =>
     body: body ? JSON.stringify(body) : undefined,
   }).then(json);
 
+// --- server / opponent health ---
+export function health() { return fetch('/api/health').then(json); }
+
 // --- games collection ---
 export function listGames() { return fetch('/api/games').then(json); }
 export function createGame() { return post('/api/games'); }

@@ -135,6 +135,13 @@ body::after {
 .brand .mark { font-family:"Fraunces",serif; font-style:italic; font-weight:400; color: var(--ink-soft); font-size: 15px; }
 .seat { font: 500 11px/1 "Spline Sans Mono", monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-faint); }
 
+/* opponent-readiness dot in the seat line — fed by the /api/health poll */
+.oppdot { display:inline-block; width: 7px; height: 7px; border-radius: 50%; vertical-align: middle;
+  margin: 0 .1em 0 .45em; background: var(--ink-faint); }
+.oppdot.ready { background: var(--good); box-shadow: 0 0 7px color-mix(in srgb, var(--good) 70%, transparent); }
+.oppdot.connecting { background: var(--brass); animation: blink 1.1s steps(2) infinite; }
+.oppdot.unknown { background: var(--ink-faint); opacity: .45; }
+
 /* the game's unique three-word name */
 .gamechip { display:inline-flex; align-items:center; gap: 8px; margin-top: 12px;
   padding: 6px 12px; border-radius: 999px; background: var(--panel); border: 1px solid var(--hair);

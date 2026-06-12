@@ -22,6 +22,9 @@ Let `S` be the server URL. Loop:
    older server without long-poll, a refused connection, or a curl error all return
    instantly — without the floor sleep you'd burn the whole idle budget in
    milliseconds and quit):
+   Run this block **as-is** (`if/then/fi` throughout so it always exits 0 — a
+   trailing `[ … ] && cmd` would exit 1 when the test is false and look like a
+   failed command):
    ```
    S=http://127.0.0.1:4577
    B='[]'; deadline=$(( $(date +%s) + 480 ))
@@ -29,9 +32,9 @@ Let `S` be the server URL. Loop:
      t0=$(date +%s)
      R=$(curl -s -m 30 "$S/api/pending?all=1&wait=1")      # parks up to 30s per poll
      if [ -n "$R" ] && [ "$R" != "[]" ]; then B="$R"; break; fi
-     [ $(( $(date +%s) - t0 )) -lt 5 ] && sleep 5           # returned early ⇒ pace, don't spin
+     if [ $(( $(date +%s) - t0 )) -lt 5 ]; then sleep 5; fi # returned early ⇒ pace, don't spin
    done
-   [ "$B" = "[]" ] && echo EMPTY || printf '%s\n' "$B"
+   if [ "$B" = "[]" ]; then echo EMPTY; else printf '%s\n' "$B"; fi
    ```
    The **bash loop owns the retry**, so the model wakes only once per ~8 min window
    (on work or deadline) — not per poll. The inner `-m 30` just bounds each poll;

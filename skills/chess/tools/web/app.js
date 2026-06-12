@@ -36,9 +36,10 @@ const ui = {
   flipped: false,
   endPosted: null,     // fen for which we've posted a game-over status
   pendingPromo: null,  // { from, to } awaiting promotion choice
+  agentActive: null,   // is a chessai agent serving black? null = not yet known
 };
 
-const snapshot = () => ({ server: ui.server, pos: ui.pos, legal: ui.legal, sel: ui.sel, flipped: ui.flipped });
+const snapshot = () => ({ server: ui.server, pos: ui.pos, legal: ui.legal, sel: ui.sel, flipped: ui.flipped, agentActive: ui.agentActive });
 const handlers = { onSquare };
 
 // --- render orchestration --------------------------------------------------
@@ -147,6 +148,22 @@ async function poll() {
   } catch (e) { view.setOffline(); }
 }
 
+// --- opponent health poll ---------------------------------------------------
+// Independent of the game poll: tells the board whether a chessai agent is
+// actually serving black yet, so we don't imply "ready" during the gap between
+// the board opening and the agent's first poll.
+async function pollHealth() {
+  try {
+    const h = await api.health();
+    const active = !!h.chessai_agent_active;
+    if (active !== ui.agentActive) { ui.agentActive = active; if (ui.server) render(); } // refresh status pill
+    view.setOpponentStatus(ui.agentActive);
+  } catch (e) {
+    if (ui.agentActive !== null) { ui.agentActive = null; if (ui.server) render(); }
+    view.setOpponentStatus(null);
+  }
+}
+
 // --- boot ------------------------------------------------------------------
 document.getElementById('btnNew').addEventListener('click', newBoard);
 document.getElementById('btnGames').addEventListener('click', refreshGames);
@@ -160,5 +177,7 @@ async function boot() {
   if (!gameId) adoptGame(await api.createGame()); // no game in URL → create one for this window
   poll();
   setInterval(poll, 1500);
+  pollHealth();
+  setInterval(pollHealth, 2000);
 }
 boot();
