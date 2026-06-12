@@ -26,6 +26,10 @@ const getOpt = (name, def) => {
 }
 const PORT = parseInt(getOpt('--port', process.env.CHESSAI_PORT || '4577'), 10)
 const OPEN = argv.includes('--open')
+// --open-url <url>: just pop the app window for an already-running server, then
+// exit (no second server). Lets a session reuse a shared server but still get its
+// own board window.
+const OPEN_URL = getOpt('--open-url', null)
 
 // ---------------------------------------------------------------------------
 // Board model (port of board.rs). row 0 == rank 8, col 0 == file a.
@@ -163,11 +167,63 @@ const DEFAULT_THEME = 'midnight'
 const games = new Map()
 const gamePath = (id) => path.join(DATA_DIR, `${id}.json`)
 
+// ---- long-poll: agents block on GET /api/pending?wait=1 until black has work ----
+// A "parked" waiter is just a held-open response (no thread; the event loop keeps
+// serving everyone else). When a move creates black work we wake every parked
+// waiter together, COALESCE_MS later, so moves made across boards in quick
+// succession land in one batch. lastBlackPollAt + the parked count also tell us
+// whether a chessai agent is currently serving black — so a second session that
+// reuses this server can skip spawning its own agent.
+const blackWaiters = []                 // { res, all, timeout }
+let coalesceTimer = null
+let lastBlackPollAt = 0
+const COALESCE_MS = 10000               // tumbling window to batch near-simultaneous moves
+const WAIT_MS = 8 * 60 * 1000           // park ceiling; the agent's curl uses a slightly larger --max-time
+const ACTIVE_WINDOW_MS = 30000          // a black poll this recent ⇒ an agent is mid-batch, still alive
+
+function chessaiAgentActive() {
+  return blackWaiters.length > 0 || Date.now() - lastBlackPollAt < ACTIVE_WINDOW_MS
+}
+// Called from touch() on every state change. Schedules a single coalesced wake
+// when black has work and someone is waiting; a no-op otherwise.
+function maybeWakeBlack() {
+  if (blackWaiters.length === 0 || coalesceTimer) return
+  if (pendingAllFor('b').length === 0) return
+  coalesceTimer = setTimeout(flushBlackWaiters, COALESCE_MS)
+}
+function flushBlackWaiters() {
+  coalesceTimer = null
+  const ready = pendingAllFor('b')
+  if (ready.length === 0) return        // nothing to send yet; keep them parked
+  const arr = ready.map(turnState)
+  while (blackWaiters.length) {
+    const w = blackWaiters.shift()
+    clearTimeout(w.timeout)
+    try {
+      w.res.writeHead(200, { 'Content-Type': 'application/json' })
+      w.res.end(JSON.stringify(w.all ? arr : arr[0]))
+    } catch {}
+  }
+}
+function parkBlackWaiter(req, res, all) {
+  const w = { res, all, timeout: null }
+  w.timeout = setTimeout(() => {
+    const i = blackWaiters.indexOf(w)
+    if (i >= 0) blackWaiters.splice(i, 1)
+    try { sendJson(res, 200, all ? [] : { id: null }) } catch {}   // timed out: empty, mirrors the no-wait shape
+  }, WAIT_MS)
+  req.on('close', () => {                                          // client gave up / died: drop it
+    const i = blackWaiters.indexOf(w)
+    if (i >= 0) { blackWaiters.splice(i, 1); clearTimeout(w.timeout) }
+  })
+  blackWaiters.push(w)
+}
+
 function persist(game) {
   try { fs.writeFileSync(gamePath(game.id), JSON.stringify(game)) }
   catch (e) { console.error(`persist ${game.id} failed: ${e.message}`) }
 }
-function touch(game) { game.updated = Date.now(); persist(game); return game }
+function touch(game) { game.updated = Date.now(); persist(game); maybeWakeBlack(); return game }
 
 function loadAll() {
   let files = []
@@ -217,7 +273,6 @@ function pendingAllFor(side) {
     .filter((g) => g.status === 'playing' && g.board.side === side)
     .sort((a, b) => a.updated - b.updated)
 }
-function pendingFor(side) { return pendingAllFor(side)[0] || null }
 
 // ---- response shapes ----
 function fullState(game) {
@@ -309,15 +364,22 @@ const server = http.createServer(async (req, res) => {
     return res.end(BOARD_HTML)
   }
   if (m === 'GET' && url.startsWith('/web/')) return serveWeb(res, url)
-  if (m === 'GET' && url === '/api/health') return sendJson(res, 200, { ok: true, version: '0.4.0', games: games.size })
+  if (m === 'GET' && url === '/api/health') return sendJson(res, 200, { ok: true, service: 'chessai', version: '0.4.0', games: games.size, chessai_agent_active: chessaiAgentActive() })
 
   // ---- agent: position(s) that need a move (default black) ----
   // ?all=1 returns EVERY pending board as an array (the batching agent fetches
   // the whole set in one shot); otherwise just the next one.
   if (m === 'GET' && url === '/api/pending') {
     const side = /(^|&)side=w(&|$)/.test(query || '') ? 'w' : 'b'
-    if (/(^|&)all=1(&|$)/.test(query || '')) return sendJson(res, 200, pendingAllFor(side).map(turnState))
-    const g = pendingFor(side)
+    const all = /(^|&)all=1(&|$)/.test(query || '')
+    const wait = /(^|&)wait=1(&|$)/.test(query || '')
+    if (side === 'b') lastBlackPollAt = Date.now()
+    const ready = pendingAllFor(side)
+    // wait=1 (black only): if nothing's pending, hold the connection open instead
+    // of returning [] — woken in a coalesced batch when a move creates work.
+    if (ready.length === 0 && wait && side === 'b') return parkBlackWaiter(req, res, all)
+    if (all) return sendJson(res, 200, ready.map(turnState))
+    const g = ready[0] || null
     return sendJson(res, 200, g ? turnState(g) : { id: null })
   }
 
@@ -486,6 +548,13 @@ function openBrowser(url) {
   const cmd = plat === 'darwin' ? 'open' : plat === 'win32' ? 'cmd' : 'xdg-open'
   const args = plat === 'win32' ? ['/c', 'start', '', url] : [url]
   try { spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref() } catch {}
+}
+
+if (OPEN_URL) {
+  // Open-only mode: spawn the (detached) browser, give it a beat to launch, exit.
+  openBrowser(OPEN_URL)
+  setTimeout(() => process.exit(0), 800)
+  return
 }
 
 server.on('error', (e) => {

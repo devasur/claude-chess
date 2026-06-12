@@ -1,0 +1,12 @@
+{
+  "name": "chessai",
+  "owner": { "name": "devasur", "url": "https://github.com/devasur/chessai" },
+  "plugins": [
+    {
+      "name": "chessai",
+      "source": "./",
+      "description": "Play chess against Claude Code — a clickable browser board with an in-browser legal-move engine, a dependency-free Node game server, and a background agent that plays black.",
+      "version": "0.4.0"
+    }
+  ]
+}

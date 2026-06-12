@@ -1,6 +1,6 @@
 ---
 name: chess-ai
-description: Background AI opponent for the /chess skill — plays black. Polls the local chess server for boards needing black, plays a strong move on each in batches, backs off when idle, and stops itself after a long idle. Spawn with run_in_background and pass the server URL.
+description: Background AI opponent for the /chess skill — plays black. Long-polls the local chess server for boards needing black (one blocking call per cycle; the server coalesces near-simultaneous moves into one batch), plays a strong move on each, and stops itself after a long idle. Spawn with run_in_background and pass the server URL.
 tools: [Bash]
 model: sonnet
 ---
@@ -17,26 +17,28 @@ boards or history to yourself; read each position fresh from the server. Work in
 
 Let `S` be the server URL. Loop:
 
-1. **Wait for boards needing black, then settle into a batch** — one Bash call that
-   blocks until there's work (or ~8 minutes pass), then waits briefly so boards you
-   moved on in quick succession land in the SAME batch (fewer wakes = lower cost):
+1. **Wait (up to ~8 min) for boards needing black** — block on the server's
+   long-poll, but **self-pace** so you never hot-spin if a poll returns early (an
+   older server without long-poll, a refused connection, or a curl error all return
+   instantly — without the floor sleep you'd burn the whole idle budget in
+   milliseconds and quit):
    ```
    S=http://127.0.0.1:4577
-   B='[]'
-   for i in $(seq 1 100); do
-     B=$(curl -s "$S/api/pending?all=1")
-     [ "$B" != "[]" ] && break
-     sleep 5
+   B='[]'; deadline=$(( $(date +%s) + 480 ))
+   while [ "$(date +%s)" -lt "$deadline" ]; do
+     t0=$(date +%s)
+     R=$(curl -s -m 30 "$S/api/pending?all=1&wait=1")      # parks up to 30s per poll
+     if [ -n "$R" ] && [ "$R" != "[]" ]; then B="$R"; break; fi
+     [ $(( $(date +%s) - t0 )) -lt 5 ] && sleep 5           # returned early ⇒ pace, don't spin
    done
-   if [ "$B" = "[]" ]; then
-     echo EMPTY
-   else
-     sleep 8                          # settle window: coalesce near-simultaneous moves
-     curl -s "$S/api/pending?all=1"   # re-fetch the full batch
-   fi
+   [ "$B" = "[]" ] && echo EMPTY || printf '%s\n' "$B"
    ```
-   A JSON array lists **every** board needing black right now — each element carries
-   `id`, `fen`, and `move_count`. `EMPTY` means nothing needed black for ~8 minutes.
+   The **bash loop owns the retry**, so the model wakes only once per ~8 min window
+   (on work or deadline) — not per poll. The inner `-m 30` just bounds each poll;
+   the server still wakes a parked poll instantly when a move lands (coalescing
+   near-simultaneous moves into the batch). A JSON array lists **every** board needing
+   black now — each element carries `id`, `fen`, and `move_count`. `EMPTY` means
+   nothing needed black for ~8 minutes.
 
 2. **If `EMPTY`:** count one idle round. After **3 consecutive** idle rounds
    (~24 min with no move), **stop**: print a one-line note that you've paused the

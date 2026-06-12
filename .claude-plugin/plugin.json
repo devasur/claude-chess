@@ -1,0 +1,10 @@
+{
+  "name": "chessai",
+  "description": "Play chess against Claude Code — a clickable browser board with an in-browser legal-move engine, a dependency-free Node game server, and a background agent that plays black.",
+  "version": "0.4.0",
+  "author": { "name": "devasur", "url": "https://github.com/devasur/chessai" },
+  "homepage": "https://github.com/devasur/chessai",
+  "repository": "https://github.com/devasur/chessai",
+  "license": "MIT",
+  "keywords": ["chess", "claude-code", "skill", "agent", "game"]
+}
